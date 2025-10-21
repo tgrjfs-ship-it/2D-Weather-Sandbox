@@ -344,7 +344,7 @@ const mToFt = 3.28084;
 const saveFileVersionID = 263574036; // Uint32 id to check if save file is compatible
 
 const guiControls_default = {
-  vorticity : 0.005,
+  vorticity : 5,
   dragMultiplier : 0, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
@@ -357,9 +357,9 @@ const guiControls_default = {
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
   waterEvaporation : 1,
-  evapHeat : 290,          //  Real: 2260 J/g
+  evapHeat : 9,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
-  condensationRate : 0.0050,
+  condensationRate : 0.50,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
   aboveZeroThreshold : 1.0, // PRECIPITATION
@@ -392,7 +392,7 @@ const guiControls_default = {
   showGraph : false,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
-  showDrops : false,
+  showDrops : true,
   paused : false,
   IterPerFrame : 10,
   auto_IterPerFrame : true,
