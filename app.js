@@ -353,11 +353,11 @@ const guiControls_default = {
   globalHeating : 0.0,
   soundingForcing : 0.0,
   sunIntensity : 1.0,
-  waterTemperature : 25.0, // °C
+  waterTemperature : 250, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
-  waterEvaporation : 0.0001,
-  evapHeat : 2.90,          //  Real: 2260 J/g
+  waterEvaporation : 1,
+  evapHeat : 290,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
   condensationRate : 0.0050,
   waterWeight : 0.25,       // 0.50
