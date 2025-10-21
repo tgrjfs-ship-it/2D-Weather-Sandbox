@@ -357,18 +357,18 @@ const guiControls_default = {
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
   waterEvaporation : 0.0001,
-  evapHeat : 9,          //  Real: 2260 J/g
+  evapHeat : 6,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
   condensationRate : 0.50,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
-  aboveZeroThreshold : 1.0, // PRECIPITATION
-  subZeroThreshold : 0.005, // 0.01
-  spawnChance : 0.00005,    // 30. 10 to 50
+  aboveZeroThreshold : 0, // PRECIPITATION
+  subZeroThreshold : 0, // 0.01
+  spawnChance : 0.005,    // 30. 10 to 50
   snowDensity : 0.2,        // 0.3
-  fallSpeed : 0.0003,
-  growthRate0C : 0.0001,    // 0.0005
-  growthRate_30C : 0.001,   // 0.01
+  fallSpeed : 0.03,
+  growthRate0C : 0.01,    // 0.0005
+  growthRate_30C : 0.1,   // 0.01
   freezingRate : 0.01,
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
