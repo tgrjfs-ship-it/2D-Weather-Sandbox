@@ -353,10 +353,10 @@ const guiControls_default = {
   globalHeating : 0.0,
   soundingForcing : 0.0,
   sunIntensity : 1.0,
-  waterTemperature : 250, // °C
+  waterTemperature : 20, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
-  waterEvaporation : 1,
+  waterEvaporation : 0.0001,
   evapHeat : 9,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
   condensationRate : 0.50,
@@ -394,7 +394,7 @@ const guiControls_default = {
   enablePrecipitation : true,
   showDrops : true,
   paused : false,
-  IterPerFrame : 10,
+  IterPerFrame : 1,
   auto_IterPerFrame : true,
   sound : true,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
