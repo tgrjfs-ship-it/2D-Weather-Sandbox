@@ -27,7 +27,7 @@ function updateSetupSliders()
   document.getElementById('simHeightShow').value = simHeight + ' m';
 }
 
-var FPS = 60.0;
+var FPS = 600;
 
 
 function mixGeneric(a, b, t, {clamp = false} = {})
@@ -344,7 +344,7 @@ const mToFt = 3.28084;
 const saveFileVersionID = 263574036; // Uint32 id to check if save file is compatible
 
 const guiControls_default = {
-  vorticity : 5,
+  vorticity : 0.005,
   dragMultiplier : 0, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
@@ -359,7 +359,7 @@ const guiControls_default = {
   waterEvaporation : 0.0001,
   evapHeat : 3,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
-  condensationRate : 0.50,
+  condensationRate : 0.02,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
   aboveZeroThreshold : 0, // PRECIPITATION
@@ -397,7 +397,7 @@ const guiControls_default = {
   IterPerFrame : 1,
   auto_IterPerFrame : true,
   sound : true,
-  dryLapseRate : 10.0,     // Real: 9.8 degrees / km
+  dryLapseRate : 1.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
   lengthUnit : 'LENGTH_UNIT_METRIC',
