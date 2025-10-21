@@ -345,7 +345,7 @@ const saveFileVersionID = 263574036; // Uint32 id to check if save file is compa
 
 const guiControls_default = {
   vorticity : 0.005,
-  dragMultiplier : 0.001, // 0.01
+  dragMultiplier : 0, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
   globalEffectsEndAlt : 10000,
@@ -392,7 +392,7 @@ const guiControls_default = {
   showGraph : false,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
-  showDrops : false,
+  showDrops : true,
   paused : false,
   IterPerFrame : 10,
   auto_IterPerFrame : true,
