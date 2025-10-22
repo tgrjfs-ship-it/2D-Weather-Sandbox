@@ -88,7 +88,7 @@ precision highp isampler2D;
 // #define POSX 0
 // #define POSY 1
 #define START_ITERNUM 2
-#define INTENSITY 3
+#define INTENSITY 6
 
 // Precipitation deposition
 #define RAIN_DEPOSITION 0
