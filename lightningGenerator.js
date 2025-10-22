@@ -16,9 +16,9 @@ function generateLightningBolt(width, height)
 
   function genLightningColor(lineWidth)
   {
-    const colR = 12;
-    const colG = 24;
-    const colB = 36;
+    const colR = Math.random(0,255);
+    const colG = Math.random(0,255);
+    const colB = Math.random(0,255);
     brightness = Math.pow(lineWidth, 2.5);
     return `rgb(${colR * brightness}, ${colG * brightness}, ${colB * brightness})`;
   }
@@ -28,9 +28,9 @@ function generateLightningBolt(width, height)
 
   let startX = width / 2.0;
   let startY = 0;
-  let angle = Math.PI / 6.;
-  let lineWidth = 9.0;
-  const targetAngle = 0.0;
+  let angle = Math.PI / 6.6;
+  let lineWidth = 10;
+  const targetAngle = Math.random(0,35);
 
   ctx.moveTo(startX, startY);
 
