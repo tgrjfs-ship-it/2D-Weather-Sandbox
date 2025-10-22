@@ -359,7 +359,7 @@ const guiControls_default = {
   waterEvaporation : 0.0001,
   evapHeat : 2.9,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
-  condensationRate : 0.02,
+  condensationRate : 0.009,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
   aboveZeroThreshold : 1, // PRECIPITATION
@@ -373,8 +373,8 @@ const guiControls_default = {
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
   displayMode : 'DISP_REAL',
-  wrapHorizontally : true,
-  SmoothCam : true,
+  wrapHorizontally : false,
+  SmoothCam : false,
   camSpeed : 0.01,
   exposure : 1.0,
   timeOfDay : 9.9,
