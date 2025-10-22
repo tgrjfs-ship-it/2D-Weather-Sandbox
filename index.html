@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>2D Weather Sandbox</title>
+    <title>2d weather sandbox 2</title>
     <script type="text/javascript" src="libraries/dat.gui.min.js"></script>
     <script type="text/javascript" src="libraries/pako.min.js"></script>
     <script type="text/javascript" src="libraries/chart.js"></script>
@@ -183,7 +183,7 @@
 <body id="body" onload="updateSetupSliders();">
     <nav class="main-nav">
         <div class="nav-title">
-            <h1>2D Weather Sandbox</h1>
+            <h1>2d weather sandbox 2</h1>
         </div>
         <div class="nav-icons">
             <a href="https://github.com/niels747/2D-Weather-Sandbox" target="_blank" rel="noopener noreferrer">
@@ -230,13 +230,13 @@
 
         <form id="startBtn" oninput="updateSetupSliders();">
             <div class="resolution-warning">
-                <p>choose a resolution - higher resolutions provide more detail but also more laggy because the gpu has to process it which increase the usage
+                <p>choose a resolution. higher resolutions provide more detail but also more laggy because the gpu has to process more, which increase the usage and lag
                 </p>
             </div>
 
             <table>
                 <tr>
-                    <td><b>Horizontal resolution</b></td>
+                    <td><b>horizontal resolution</b></td>
                     <td style="width: 30%">
                         <input type="range" min="100" max="16000" value="2500" step="100" id="simResSelX" />
                         <output id="simResShowX"></output>
@@ -246,28 +246,28 @@
                         40 km</td>
                 </tr>
                 <tr>
-                    <td><b>Vertical resolution</b></td>
+                    <td><b>vertical resolution</b></td>
                     <td>
                         <input type="range" min="100" max="500" value="300" step="10" id="simResSelY" />
                         <output id="simResShowY"></output>
                     </td>
-                    <td><i id="simResYWarning" style="color:rgb(255, 61, 61); display: none;">Vertical resolutions
+                    <td><i id="simResYWarning" style="color:rgb(255, 61, 61); display: none;">vertical resolutions
                             other
-                            than 300 are not optimized and may be buggy!</i></td>
+                            than 300 are not optimized</i></td>
                 </tr>
                 <tr>
-                    <td><b>Simulation height</b></td>
+                    <td><b>simulation height</b></td>
                     <td>0
-                        <input type="range" min="5000" max="15000" value="12000" step="100" id="simHeightSel" />
+                        <input type="range" min="2500" max="25000" value="10000" step="100" id="simHeightSel" />
                         <output id="simHeightShow"></output>
                     </td>
-                    <td><i id="simHeightWarning" style="color:rgb(255, 61, 61); display: none;">Sim heights other
+                    <td><i id="simHeightWarning" style="color:rgb(255, 61, 61); display: none;">sim heights other
                             than
-                            12000 m are not optimized and may be buggy!</i></td>
+                            12000 m are not optimized</i></td>
                 </tr>
             </table>
             <input type="button" value="Create New Simulation" onclick="loadData ()" />
-            <i>Move the mouse until you see a terrain you like, then just click to start.</i>
+            <i>move or hold the mouse until you see a terrain you like, then just release to start the simulation.</i>
         </form>
 
 
