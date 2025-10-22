@@ -352,7 +352,7 @@ const guiControls_default = {
   globalDrying : 0.000000, // 0.000010
   globalHeating : 0.0,
   soundingForcing : 0.0,
-  sunIntensity : 10,
+  sunIntensity : 1,
   waterTemperature : 40, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
@@ -362,7 +362,7 @@ const guiControls_default = {
   condensationRate : 0.02,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
-  aboveZeroThreshold : 0, // PRECIPITATION
+  aboveZeroThreshold : 1, // PRECIPITATION
   subZeroThreshold : 0, // 0.01
   spawnChance : 0.0005,    // 30. 10 to 50
   snowDensity : 0.2,        // 0.3
@@ -390,7 +390,7 @@ const guiControls_default = {
   wholeWidth : false,
   intensity : 0.05,
   showGraph : false,
-  realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
+  realDewPoint : true, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : true,
   paused : true,
