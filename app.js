@@ -353,11 +353,11 @@ const guiControls_default = {
   globalHeating : 0.0,
   soundingForcing : 0.0,
   sunIntensity : 1,
-  waterTemperature : 40, // °C
+  waterTemperature : 25, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
   waterEvaporation : 0.0001,
-  evapHeat : 5,          //  Real: 2260 J/g
+  evapHeat : 2.9,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
   condensationRate : 0.02,
   waterWeight : 0.25,       // 0.50
@@ -367,8 +367,8 @@ const guiControls_default = {
   spawnChance : 0.0005,    // 30. 10 to 50
   snowDensity : 0.2,        // 0.3
   fallSpeed : 0.0003,
-  growthRate0C : 0.001,    // 0.0005
-  growthRate_30C : 0.001,   // 0.01
+  growthRate0C : 0.0005,    // 0.0005
+  growthRate_30C : 0.005,   // 0.01
   freezingRate : 0.01,
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
@@ -393,7 +393,7 @@ const guiControls_default = {
   realDewPoint : true, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : true,
-  paused : true,
+  paused : false,
   IterPerFrame : 1,
   auto_IterPerFrame : true,
   sound : true,
