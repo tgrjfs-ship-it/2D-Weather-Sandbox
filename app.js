@@ -27,7 +27,7 @@ function updateSetupSliders()
   document.getElementById('simHeightShow').value = simHeight + ' m';
 }
 
-var FPS = 600;
+var FPS = 60.0;
 
 
 function mixGeneric(a, b, t, {clamp = false} = {})
@@ -353,11 +353,11 @@ const guiControls_default = {
   globalHeating : 0.0,
   soundingForcing : 0.0,
   sunIntensity : 10,
-  waterTemperature : 20, // °C
+  waterTemperature : 40, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
   waterEvaporation : 0.0001,
-  evapHeat : 3,          //  Real: 2260 J/g
+  evapHeat : 5,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
   condensationRate : 0.02,
   waterWeight : 0.25,       // 0.50
@@ -368,7 +368,7 @@ const guiControls_default = {
   snowDensity : 0.2,        // 0.3
   fallSpeed : 0.0003,
   growthRate0C : 0.001,    // 0.0005
-  growthRate_30C : 0.01,   // 0.01
+  growthRate_30C : 0.001,   // 0.01
   freezingRate : 0.01,
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
@@ -388,12 +388,12 @@ const guiControls_default = {
   tool : 'TOOL_NONE',
   brushSize : 20,
   wholeWidth : false,
-  intensity : 0.01,
+  intensity : 0.05,
   showGraph : false,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : true,
-  paused : false,
+  paused : true,
   IterPerFrame : 1,
   auto_IterPerFrame : true,
   sound : true,
@@ -2952,8 +2952,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   // console.log(gl.getContextAttributes());
 
   if (!gl) {
-    alert('Your browser does not support WebGL2, Download a new browser.');
-    throw ' Error: Your browser does not support WebGL2';
+    alert('your device does not support WebGL2, try using different devices.');
+    throw ' Error: your device does not support WebGL2';
   }
 
   // SETUP GUI
@@ -6173,7 +6173,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         }); // turn back into blob and add version id in front
         download(saveFileName + '.weathersandbox', compressedBlob);
       } else {
-        alert('You didn\'t enter a valid file name!');
+        alert('you didnt enter a valid file name!');
       }
     }
     guiControls.IterPerFrame = prevIterPerFrame;
@@ -6206,7 +6206,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       request.open('GET', fileName, false);
       request.send(null);
     } catch (error) {
-      await loadingBar.showError('ERROR loading shader files! If you just opened index.html, try again using a local server!');
+      await loadingBar.showError('ERROR loading shader files! please check your internet connection.');
       throw error;
     }
 
