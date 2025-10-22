@@ -221,16 +221,16 @@
                         <option value="12" selected>12H</option>
                         <option value="18">18H</option>
                     </select>
-                    <p>Select a real world sounding to use as forcing in the simulation</p>
+                    <p>choose a real world sounding to use as forcing in the simulation</p>
                 </div>
             </div>
             <img style="float: left; height: 500px;" id="soundingPreview"
-                alt="Sounding not available, Please select a different time.">
+                alt="sounding not available. please choose a different time.">
         </div>
 
         <form id="startBtn" oninput="updateSetupSliders();">
             <div class="resolution-warning">
-                <p>Choose a resolution - Higher resolutions provide more detail but significantly impact performance
+                <p>choose a resolution - higher resolutions provide more detail but also more laggy because the gpu has to process it which increase the usage
                 </p>
             </div>
 
@@ -258,7 +258,7 @@
                 <tr>
                     <td><b>Simulation height</b></td>
                     <td>0
-                        <input type="range" min="5000" max="150000" value="12000" step="100" id="simHeightSel" />
+                        <input type="range" min="5000" max="15000" value="12000" step="100" id="simHeightSel" />
                         <output id="simHeightShow"></output>
                     </td>
                     <td><i id="simHeightWarning" style="color:rgb(255, 61, 61); display: none;">Sim heights other
@@ -454,15 +454,15 @@
 
         <div class="support">
             <h1 style="color: rgb(0, 255, 0)">$ Support me on Patreon $</h1>
-            If you love my project and want to support its future development, please consider <a
+            if you like my project and want to support its future development, please consider <a
                 href="https://www.patreon.com/user?u=76043935" target="_blank" rel="noopener noreferrer"
                 style="color: white">supporting me on patreon</a>
             <br />
-            Every small amount helps! Thank you!
+            every small amount helps
             <br />
             <br />
             <br />
-            <i>By Niels Daemen</i>
+            <i>by tgrifs</i>
         </div>
     </div>
 
