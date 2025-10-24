@@ -345,36 +345,36 @@ const saveFileVersionID = 263574036; // Uint32 id to check if save file is compa
 
 const guiControls_default = {
   vorticity : 0.005,
-  dragMultiplier : 0, // 0.01
+  dragMultiplier : 0.001, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
   globalEffectsEndAlt : 10000,
   globalDrying : 0.000000, // 0.000010
   globalHeating : 0.0,
   soundingForcing : 0.0,
-  sunIntensity : 1,
-  waterTemperature : 25, // °C
+  sunIntensity : 1.0,
+  waterTemperature : 25.0, // °C
   dynamicWaterTemperature : true,
   landEvaporation : 0.00005,
   waterEvaporation : 0.0001,
-  evapHeat : 2.9,          //  Real: 2260 J/g
+  evapHeat : 2.90,          //  Real: 2260 J/g
   meltingHeat : 0.43,       //  Real:  334 J/g
-  condensationRate : 0.009,
+  condensationRate : 0.0050,
   waterWeight : 0.25,       // 0.50
   inactiveDroplets : 0,
-  aboveZeroThreshold : 1, // PRECIPITATION
-  subZeroThreshold : 0, // 0.01
-  spawnChance : 0.0005,    // 30. 10 to 50
+  aboveZeroThreshold : 1.0, // PRECIPITATION
+  subZeroThreshold : 0.005, // 0.01
+  spawnChance : 0.00005,    // 30. 10 to 50
   snowDensity : 0.2,        // 0.3
   fallSpeed : 0.0003,
-  growthRate0C : 0.0005,    // 0.0005
-  growthRate_30C : 0.005,   // 0.01
+  growthRate0C : 0.0001,    // 0.0005
+  growthRate_30C : 0.001,   // 0.01
   freezingRate : 0.01,
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
   displayMode : 'DISP_REAL',
-  wrapHorizontally : false,
-  SmoothCam : false,
+  wrapHorizontally : true,
+  SmoothCam : true,
   camSpeed : 0.01,
   exposure : 1.0,
   timeOfDay : 9.9,
@@ -388,16 +388,16 @@ const guiControls_default = {
   tool : 'TOOL_NONE',
   brushSize : 20,
   wholeWidth : false,
-  intensity : 0.05,
+  intensity : 0.01,
   showGraph : false,
-  realDewPoint : true, // show real dew point in graph, instead of dew point with cloud water included
+  realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
-  showDrops : true,
+  showDrops : false,
   paused : false,
-  IterPerFrame : 1,
+  IterPerFrame : 10,
   auto_IterPerFrame : true,
   sound : true,
-  dryLapseRate : 1.0,     // Real: 9.8 degrees / km
+  dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
   lengthUnit : 'LENGTH_UNIT_METRIC',
@@ -2952,8 +2952,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   // console.log(gl.getContextAttributes());
 
   if (!gl) {
-    alert('your device does not support WebGL2, try using different devices.');
-    throw ' Error: your device does not support WebGL2';
+    alert('Your browser does not support WebGL2, Download a new browser.');
+    throw ' Error: Your browser does not support WebGL2';
   }
 
   // SETUP GUI
@@ -6173,7 +6173,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         }); // turn back into blob and add version id in front
         download(saveFileName + '.weathersandbox', compressedBlob);
       } else {
-        alert('you didnt enter a valid file name!');
+        alert('You didn\'t enter a valid file name!');
       }
     }
     guiControls.IterPerFrame = prevIterPerFrame;
@@ -6206,7 +6206,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       request.open('GET', fileName, false);
       request.send(null);
     } catch (error) {
-      await loadingBar.showError('ERROR loading shader files! please check your internet connection.');
+      await loadingBar.showError('ERROR loading shader files! If you just opened index.html, try again using a local server!');
       throw error;
     }
 
