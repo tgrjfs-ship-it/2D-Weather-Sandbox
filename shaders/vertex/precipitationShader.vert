@@ -125,7 +125,7 @@ void main()
 
           float cloudPlusPrecipDensity = water[CLOUD] + water[PRECIPITATION];
 
-          float lightningSpawnChance = max((cloudPlusPrecipDensity - lightningCloudDensityThreshold) * lightningChanceMultiplier, 2);
+          float lightningSpawnChance = max((cloudPlusPrecipDensity - lightningCloudDensityThreshold) * lightningChanceMultiplier, 0.95);
 
           const float minIterationsSinceLastLightningBolt = 30.;                                                                                                                       // 50.
 
