@@ -393,7 +393,7 @@ const guiControls_default = {
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : false,
-  paused : false,
+  paused : true,
   IterPerFrame : 10,
   auto_IterPerFrame : true,
   sound : true,
