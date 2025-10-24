@@ -19,7 +19,7 @@ void main()
 
   /* // dots:
   if(mass_out[1] > 0.){
-      if(density_out < 1.0)
+      if(density_out < 1.5)
           fragmentColor = vec4(1.0, 1.0, 1.0, 1.0); // snow
       else
           fragmentColor = vec4(1.0, 1.0, 0.0, 1.0); // hail
