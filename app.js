@@ -345,7 +345,7 @@ const saveFileVersionID = 263574036; // Uint32 id to check if save file is compa
 
 const guiControls_default = {
   vorticity : 0.005,
-  dragMultiplier : 0, // 0.01
+  dragMultiplier : 0.001, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
   globalEffectsEndAlt : 10000,
@@ -6199,63 +6199,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
   }
 
-  // worker.onmessage handler
-worker.onmessage = (event) => {
-  const result = event.data;
-  // result.imageData may already be an ImageData object (or a plain object reconstructed after transfer)
-  const imageData = result.imageData;
-  const intensity = result.shakeIntensity || 0;
-
-  // draw the lightning image onto a separate canvas or compositing buffer
-  lightningBufferCtx.putImageData(imageData, 0, 0);
-
-  // start the shake: intensity range 0..1
-  startShake(300, 12 * intensity); // 300ms duration, max amplitude scaled by intensity
-};
-  let shake = { remaining: 0, duration: 0, maxAmp: 0 };
-
-function startShake(durationMs = 300, maxAmplitudePx = 12) {
-  shake.duration = durationMs;
-  shake.remaining = durationMs;
-  shake.maxAmp = maxAmplitudePx;
-}
-
-// call once per frame (dt in ms)
-function updateShake(dt) {
-  if (shake.remaining <= 0) return { x: 0, y: 0 };
-  shake.remaining = Math.max(0, shake.remaining - dt);
-  // ease-out envelope
-  const t = shake.remaining / shake.duration;
-  const amp = shake.maxAmp * (t); // linear decay, change as desired
-  const x = (Math.random() * 2 - 1) * amp;
-  const y = (Math.random() * 2 - 1) * amp;
-  return { x, y };
-    }
-  let lastTime = performance.now();
-
-function renderLoop(time) {
-  const dt = time - lastTime;
-  lastTime = time;
-
-  const offset = updateShake(dt);
-
-  ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // apply shake translation
-  ctx.translate(Math.round(offset.x), Math.round(offset.y));
-
-  // draw scene here (examples)
-  // ctx.drawImage(backgroundCanvas, 0, 0);
-  // ctx.drawImage(lightningBufferCanvas, 0, 0); // previously putImageData into this buffer
-
-  ctx.restore();
-
-  requestAnimationFrame(renderLoop);
-}
-
-requestAnimationFrame(renderLoop);
-
   async function loadSourceFile(fileName)
   {
     try {
@@ -6342,7 +6285,7 @@ requestAnimationFrame(renderLoop);
           if (FPS == fpsTarget)
             adjIterPerFrame(1);
         }
-      }​
+      }
       // calculate total amounts of water and smoke for verification of fluid simulation
       /*
             gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
