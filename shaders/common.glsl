@@ -85,6 +85,7 @@ precision highp isampler2D;
 // 3 not used
 
 // Lightning Location
+#define CG_LIGHTNING_INTENSITY_THRESHOLD 1.0
 // #define POSX 0
 // #define POSY 1
 #define START_ITERNUM 2

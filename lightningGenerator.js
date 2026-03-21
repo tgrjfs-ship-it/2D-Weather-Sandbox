@@ -14,16 +14,18 @@ function generateLightningBolt(width, height)
   ctx.clearRect(0, 0, width, height);
 
 
-  function genLightningColor(lineWidth)
+  function genLightningColor(lineWidth, alpha = 1.0)
   {
-    const colR = 12;
-    const colG = 12;
-    const colB = 12;
-    brightness = Math.pow(lineWidth, 2.0);
-    return `rgb(${colR * brightness}, ${colG * brightness}, ${colB * brightness})`;
+    const brightness = Math.min(255, 80 + Math.pow(lineWidth, 1.35) * 22);
+    const glowBoost = Math.min(255, brightness * 1.15);
+    return `rgba(${glowBoost}, ${glowBoost}, 255, ${alpha})`;
   }
 
 
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowBlur = 18;
+  ctx.shadowColor = 'rgba(180, 210, 255, 0.95)';
   ctx.beginPath();
 
   let startX = width / 2.0;
@@ -52,7 +54,7 @@ function generateLightningBolt(width, height)
 
 
     if (Math.random() < 0.015 * (1. - nextY / height)) { // branch
-      ctx.strokeStyle = genLightningColor(lineWidth);
+      ctx.strokeStyle = genLightningColor(lineWidth, 0.9);
       ctx.stroke();
       drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * 2.5, lineWidth * 0.5 * Math.random());
       ctx.beginPath();
@@ -60,7 +62,7 @@ function generateLightningBolt(width, height)
       ctx.lineWidth = lineWidth;
     }
   }
-  ctx.strokeStyle = genLightningColor(lineWidth);
+  ctx.strokeStyle = genLightningColor(lineWidth, 0.95);
   ctx.stroke();
 
 
@@ -91,7 +93,7 @@ function generateLightningBolt(width, height)
 
       if (Math.random() < 0.018) { // reduce width
 
-        ctx.strokeStyle = genLightningColor(line_width);
+        ctx.strokeStyle = genLightningColor(line_width, 0.55);
         ctx.stroke();
         line_width -= 0.2;
 
@@ -108,7 +110,7 @@ function generateLightningBolt(width, height)
         ctx.lineWidth = line_width;
       }
     }
-    ctx.strokeStyle = genLightningColor(line_width);
+    ctx.strokeStyle = genLightningColor(line_width, 0.55);
     ctx.stroke();
   }
 }

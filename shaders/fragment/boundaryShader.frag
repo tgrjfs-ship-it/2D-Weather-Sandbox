@@ -27,10 +27,16 @@ uniform float vorticity;
 uniform float waterEvaporation;
 uniform float landEvaporation;
 uniform float waterWeight;
-uniform vec4 initial_Tv[126];
+uniform sampler2D initialProfileTex;
 uniform bool allowCaves;
 
-float getInitialT(int y) { return initial_Tv[y / 4][y % 4]; }
+float getProfileValue(sampler2D profileTex, int y)
+{
+  vec4 texel = texelFetch(profileTex, ivec2(y / 4, 0), 0);
+  return texel[y % 4];
+}
+
+float getInitialT(int y) { return getProfileValue(initialProfileTex, y); }
 
 uniform float sunAngle;
 

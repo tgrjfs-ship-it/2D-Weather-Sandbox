@@ -114,7 +114,7 @@ const float lightningTexAspect = lightningTexRes.x / lightningTexRes.y;
 float calcLightningTime(float startIterNum)
 {
   float lightningTime = iterNum - startIterNum;
-  return lightningTime / 5.0; // 30.0    0. to 1. leader stage, 1. + Flash stage
+  return (lightningTime + 0.9) / 2.0; // accelerate initial flash so strikes are visible immediately
 }
 
 float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
@@ -149,11 +149,12 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   if (lightningTexCoord.x < 0.01 || lightningTexCoord.x > 1.01 || lightningTexCoord.y < 0.01 || lightningTexCoord.y > 1.01) // prevent edge effect when mipmapping
     return vec3(0);
 
-  float pixVal = texture(lightningTex, lightningTexCoord).r;
+  vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
+  float pixVal = max(max(lightningTexel.r, lightningTexel.g), max(lightningTexel.b, lightningTexel.a));
 
-  const float branchShowFactor = 2.5;       // 1.5
-  const float leaderBrightness = 50000.;    // 200.0
-  const float mainBoltBrightness = 100000.; // 100000.
+  const float branchShowFactor = 2.1;      // 1.5
+  const float leaderBrightness = 12000.;    // 200.0
+  const float mainBoltBrightness = 65000.;  // 100000.
 
   float brightnessThreshold = 1. - lightningTime * branchShowFactor;
   brightnessThreshold += lightningTexCoord.y * branchShowFactor; // grow from the top to the bottem
@@ -161,7 +162,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   brightnessThreshold = clamp(brightnessThreshold, 0., 1.);
 
   if (lightningTime > 1.0) { // main bolt
-    brightnessThreshold = 0.95;
+    brightnessThreshold = 0.82;
     currentLightningIntensity *= mainBoltBrightness;
   } else {
     currentLightningIntensity = leaderBrightness;
@@ -173,7 +174,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   pixVal *= currentLightningIntensity;
 
-  const vec3 lightningCol = vec3(0.70, 0.57, 1.0); // 0.584, 0.576, 1.0
+  const vec3 lightningCol = vec3(0.82, 0.86, 1.0); // cold white-blue lightning
 
   vec3 outputColor = max(pixVal * lightningCol, vec3(0));
 
@@ -258,7 +259,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
 
 
-  if (lightningData[INTENSITY] > 1.0) { // CG
+  if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
     emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity);
     emittedLight /= 1. + cloudDensity * 100.0;
   }
@@ -268,6 +269,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
   dist.x *= aspectRatios[0];
   float lightningOnLight = lightningOnLightBrightness / (pow(length(dist), 2.) + 0.03);
+  lightningOnLight *= step(lightningTime, 6.0);
   lightningOnLight *= currentLightningIntensity;
   onLight += vec3(lightningOnLight);
 
