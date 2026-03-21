@@ -258,7 +258,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
 
 
-  if (lightningData[INTENSITY] > 1.0) { // CG
+  if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
     emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity);
     emittedLight /= 1. + cloudDensity * 100.0;
   }
@@ -268,6 +268,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
   dist.x *= aspectRatios[0];
   float lightningOnLight = lightningOnLightBrightness / (pow(length(dist), 2.) + 0.03);
+  lightningOnLight *= step(lightningTime, 6.0);
   lightningOnLight *= currentLightningIntensity;
   onLight += vec3(lightningOnLight);
 

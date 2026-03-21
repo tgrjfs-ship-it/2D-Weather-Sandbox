@@ -18,9 +18,15 @@ uniform float wind;
 uniform vec2 texelSize;
 // uniform vec2 resolution;
 
-uniform vec4 initial_Tv[126];
+uniform sampler2D initialProfileTex;
 
-float getInitialT(int y) { return initial_Tv[y / 4][y % 4]; }
+float getProfileValue(sampler2D profileTex, int y)
+{
+  vec4 texel = texelFetch(profileTex, ivec2(y / 4, 0), 0);
+  return texel[y % 4];
+}
+
+float getInitialT(int y) { return getProfileValue(initialProfileTex, y); }
 
 layout(location = 0) out vec4 base;
 layout(location = 2) out ivec4 wall;
