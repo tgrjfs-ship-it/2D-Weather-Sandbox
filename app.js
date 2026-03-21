@@ -1516,6 +1516,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     #Xvel;
     #Yvel;
     #Zvel;
+    #shakeAmplitude;
+    #shakeOffsetX;
+    #shakeOffsetY;
+    #shakeJitterFrames;
+    renderXpos;
+    renderYpos;
 
     constructor()
     {
@@ -1531,6 +1537,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       this.#Xvel = 0;
       this.#Yvel = 0;
       this.#Zvel = 0;
+      this.#shakeAmplitude = 0;
+      this.#shakeOffsetX = 0;
+      this.#shakeOffsetY = 0;
+      this.#shakeJitterFrames = 0;
+      this.renderXpos = this.curXpos;
+      this.renderYpos = this.curYpos;
     }
 
     center()
@@ -1541,6 +1553,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       this.#Xvel = 0;
       this.#Yvel = 0;
       this.#Zvel = 0;
+      this.#shakeAmplitude = 0;
+      this.#shakeOffsetX = 0;
+      this.#shakeOffsetY = 0;
+      this.#shakeJitterFrames = 0;
+      this.renderXpos = this.curXpos;
+      this.renderYpos = this.curYpos;
     }
 
     changeCurXpos(change)
@@ -1556,6 +1574,33 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       if (zoom)
         this.curZoom = this.tarZoom = zoom;
+    }
+
+    triggerShake(intensity)
+    {
+      const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.0), 0.0, 4.0, 0.0015, 0.018);
+      this.#shakeAmplitude = Math.max(this.#shakeAmplitude, baseAmplitude);
+      this.#shakeJitterFrames = 0;
+    }
+
+    #updateShake()
+    {
+      if (this.#shakeAmplitude < 0.00001) {
+        this.#shakeAmplitude = 0;
+        this.#shakeOffsetX = 0;
+        this.#shakeOffsetY = 0;
+      } else {
+        this.#shakeJitterFrames -= 1;
+        if (this.#shakeJitterFrames <= 0) {
+          this.#shakeJitterFrames = 1;
+          this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude;
+          this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect;
+        }
+        this.#shakeAmplitude *= 0.86;
+      }
+
+      this.renderXpos = this.curXpos + this.#shakeOffsetX;
+      this.renderYpos = this.curYpos + this.#shakeOffsetY;
     }
 
     move()
@@ -1580,6 +1625,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         this.curYpos += yDif;
         this.curZoom += zoomDif;
       }
+
+      this.#updateShake();
 
       if (guiControls.sound && !guiControls.paused) {
         soundSystem.updateAmbientSound(this.curXpos, this.curYpos, this.curZoom);
@@ -5192,6 +5239,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const precipitationFeedbackTexture = gl.createTexture();
   const precipitationDepositionTexture = gl.createTexture();
   const lightningDataTexture = gl.createTexture(); // single pixel texture holding location and timing of current lightning strike
+  const initialProfileTexture = gl.createTexture();
+  const realWorldSoundingTTexture = gl.createTexture();
+  const realWorldSoundingWTexture = gl.createTexture();
+  const realWorldSoundingVelTexture = gl.createTexture();
 
   // Static texures:
   const noiseTexture = gl.createTexture();
@@ -5215,6 +5266,20 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const lightFrameBuff_1 = gl.createFramebuffer();
   const precipitationFeedbackFrameBuff = gl.createFramebuffer();
   const lightningDataFrameBuff = gl.createFramebuffer();
+
+  function uploadProfileTexture(texture, values)
+  {
+    const profileTexWidth = Math.ceil(values.length / 4);
+    const packedValues = new Float32Array(profileTexWidth * 4);
+    packedValues.set(values);
+
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, profileTexWidth, 1, 0, gl.RGBA, gl.FLOAT, packedValues);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
 
   // Set up Textures
   async function setupTextures()
@@ -5506,6 +5571,20 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   cellHeight = guiControls.simHeight / sim_res_y; // in meters
 
+  uploadProfileTexture(initialProfileTexture, initial_T);
+  uploadProfileTexture(realWorldSoundingTTexture, realWorldSounding_T);
+  uploadProfileTexture(realWorldSoundingWTexture, realWorldSounding_W);
+  uploadProfileTexture(realWorldSoundingVelTexture, realWorldSounding_Vel);
+
+  gl.activeTexture(gl.TEXTURE11);
+  gl.bindTexture(gl.TEXTURE_2D, initialProfileTexture);
+  gl.activeTexture(gl.TEXTURE12);
+  gl.bindTexture(gl.TEXTURE_2D, realWorldSoundingTTexture);
+  gl.activeTexture(gl.TEXTURE13);
+  gl.bindTexture(gl.TEXTURE_2D, realWorldSoundingWTexture);
+  gl.activeTexture(gl.TEXTURE14);
+  gl.bindTexture(gl.TEXTURE_2D, realWorldSoundingVelTexture);
+
   // Set constant uniforms
   gl.useProgram(setupProgram);
   gl.uniform2f(gl.getUniformLocation(setupProgram, 'texelSize'), texelSizeX, texelSizeY);
@@ -5513,7 +5592,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform1f(gl.getUniformLocation(setupProgram, 'dryLapse'), dryLapse);
   gl.uniform1f(gl.getUniformLocation(setupProgram, 'simHeight'), guiControls.simHeight);
 
-  gl.uniform4fv(gl.getUniformLocation(setupProgram, 'initial_Tv'), initial_T);
+  gl.uniform1i(gl.getUniformLocation(setupProgram, 'initialProfileTex'), 11);
 
   gl.useProgram(advectionProgram);
   gl.uniform1i(gl.getUniformLocation(advectionProgram, 'baseTex'), 0);
@@ -5523,14 +5602,14 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform2f(gl.getUniformLocation(advectionProgram, 'resolution'), sim_res_x, sim_res_y);
   // gl.uniform1fv(
   // gl.getUniformLocation(advectionProgram, 'initial_T'), initial_T);
-  gl.uniform4fv(gl.getUniformLocation(advectionProgram, 'initial_Tv'), initial_T);
+  gl.uniform1i(gl.getUniformLocation(advectionProgram, 'initialProfileTex'), 11);
   gl.uniform1f(gl.getUniformLocation(advectionProgram, 'dryLapse'), dryLapse);
   gl.uniform1f(gl.getUniformLocation(advectionProgram, 'waterTemperature'),
                CtoK(guiControls.waterTemperature)); // can be changed by GUI input
 
-  gl.uniform4fv(gl.getUniformLocation(advectionProgram, 'realWorldSounding_Tv'), realWorldSounding_T);
-  gl.uniform4fv(gl.getUniformLocation(advectionProgram, 'realWorldSounding_Wv'), realWorldSounding_W);
-  gl.uniform4fv(gl.getUniformLocation(advectionProgram, 'realWorldSounding_Velv'), realWorldSounding_Vel);
+  gl.uniform1i(gl.getUniformLocation(advectionProgram, 'realWorldSoundingTexT'), 12);
+  gl.uniform1i(gl.getUniformLocation(advectionProgram, 'realWorldSoundingTexW'), 13);
+  gl.uniform1i(gl.getUniformLocation(advectionProgram, 'realWorldSoundingTexVel'), 14);
 
   gl.useProgram(pressureProgram);
   gl.uniform1i(gl.getUniformLocation(pressureProgram, 'baseTex'), 0);
@@ -5543,7 +5622,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform2f(gl.getUniformLocation(velocityProgram, 'texelSize'), texelSizeX, texelSizeY);
 
   // gl.uniform1fv(gl.getUniformLocation(velocityProgram, 'initial_T'), initial_T);
-  gl.uniform4fv(gl.getUniformLocation(velocityProgram, 'initial_Tv'), initial_T);
+  gl.uniform1i(gl.getUniformLocation(velocityProgram, 'initialProfileTex'), 11);
 
   gl.useProgram(vorticityProgram);
   gl.uniform2f(gl.getUniformLocation(vorticityProgram, 'texelSize'), texelSizeX, texelSizeY);
@@ -5565,7 +5644,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                CtoK(guiControls.waterTemperature)); // can be changed by GUI input
   gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'dryLapse'), dryLapse);
   // gl.uniform1fv(gl.getUniformLocation(boundaryProgram, 'initial_T'), initial_T);
-  gl.uniform4fv(gl.getUniformLocation(boundaryProgram, 'initial_Tv'), initial_T);
+  gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'initialProfileTex'), 11);
   gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'allowCaves'), guiControls.allowCaves ? 1 : 0);
 
   gl.useProgram(curlProgram);
@@ -6029,14 +6108,16 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
               gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-              if (guiControls.sound) {
-                gl.readBuffer(gl.COLOR_ATTACHMENT0);
-                var lightningDataValues = new Float32Array(4);
-                gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, lightningDataValues);
-                // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
+              gl.readBuffer(gl.COLOR_ATTACHMENT0);
+              var lightningDataValues = new Float32Array(4);
+              gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, lightningDataValues);
+              // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
 
-                if (Math.round(lightningDataValues[2]) == iterNum) {
-                  soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], Math.pow(lightningDataValues[3], 2.0));
+              if (Math.round(lightningDataValues[2]) == iterNum) {
+                const lightningIntensity = Math.pow(lightningDataValues[3], 2.0);
+                cam.triggerShake(lightningDataValues[3]);
+                if (guiControls.sound) {
+                  soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], lightningIntensity);
                 }
               }
             }
@@ -6223,7 +6304,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       gl.useProgram(skyBackgroundDisplayProgram);
       gl.uniform2f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-      gl.uniform3f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+      gl.uniform3f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
       gl.uniform1f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'Xmult'), horizontalDisplayMult);
       gl.uniform1f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'iterNum'), iterNum);
 
@@ -6238,7 +6319,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       // draw clouds and terrain
       gl.useProgram(realisticDisplayProgram);
       gl.uniform2f(gl.getUniformLocation(realisticDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-      gl.uniform3f(gl.getUniformLocation(realisticDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+      gl.uniform3f(gl.getUniformLocation(realisticDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
       gl.uniform4f(gl.getUniformLocation(realisticDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'Xmult'), horizontalDisplayMult);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'iterNum'), iterNum);
@@ -6363,7 +6444,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         // draw precipitation
         gl.useProgram(precipDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(precipDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(precipDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(precipDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.bindVertexArray(destVAO);
         gl.drawArrays(gl.POINTS, 0, NUM_DROPLETS);
         gl.bindVertexArray(fluidVao); // set screenfilling rect again
@@ -6384,7 +6465,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       if (guiControls.displayMode == 'DISP_TEMPERATURE') {
         gl.useProgram(temperatureDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(temperatureDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(temperatureDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(temperatureDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(temperatureDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(temperatureDisplayProgram, 'Xmult'), horizontalDisplayMult);
 
@@ -6400,21 +6481,21 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else if (guiControls.displayMode == 'DISP_AIRQUALITY') {
         gl.useProgram(airQualityDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(airQualityDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(airQualityDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(airQualityDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(airQualityDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(airQualityDisplayProgram, 'Xmult'), horizontalDisplayMult);
 
       } else if (guiControls.displayMode == 'DISP_HUMD') {
         gl.useProgram(humidityDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(humidityDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(humidityDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(humidityDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(humidityDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(humidityDisplayProgram, 'Xmult'), horizontalDisplayMult);
 
       } else if (guiControls.displayMode == 'DISP_IRDOWNTEMP') {
         gl.useProgram(IRtempDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(IRtempDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(IRtempDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(IRtempDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(IRtempDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1i(gl.getUniformLocation(IRtempDisplayProgram, 'upOrDown'), 0);
         gl.uniform1f(gl.getUniformLocation(IRtempDisplayProgram, 'Xmult'), horizontalDisplayMult);
@@ -6424,7 +6505,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else if (guiControls.displayMode == 'DISP_IRUPTEMP') {
         gl.useProgram(IRtempDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(IRtempDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(IRtempDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(IRtempDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(IRtempDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1i(gl.getUniformLocation(IRtempDisplayProgram, 'upOrDown'), 1);
         gl.uniform1f(gl.getUniformLocation(IRtempDisplayProgram, 'Xmult'), horizontalDisplayMult);
@@ -6434,7 +6515,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else {
         gl.useProgram(universalDisplayProgram);
         gl.uniform2f(gl.getUniformLocation(universalDisplayProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
-        gl.uniform3f(gl.getUniformLocation(universalDisplayProgram, 'view'), cam.curXpos, cam.curYpos, cam.curZoom);
+        gl.uniform3f(gl.getUniformLocation(universalDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(universalDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(universalDisplayProgram, 'Xmult'), horizontalDisplayMult);
 
