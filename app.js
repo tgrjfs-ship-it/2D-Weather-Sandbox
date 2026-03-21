@@ -333,6 +333,7 @@ var SETUP_MODE = false;
 var loadingBar;
 var cam;
 var soundSystem;
+var simHudEl;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -341,6 +342,86 @@ const kmToMil = 0.62137;
 const mToFt = 3.28084;
 
 const saveFileVersionID = 263574036; // Uint32 id to check if save file is compatible
+
+const displayModeLabels = {
+  DISP_TEMPERATURE : 'Temperature',
+  DISP_WATER : 'Water vapor',
+  DISP_REAL : 'Realistic',
+  DISP_HORIVEL : 'Horizontal velocity',
+  DISP_VERTVEL : 'Vertical velocity',
+  DISP_IRHEATING : 'IR heating',
+  DISP_IRDOWNTEMP : 'IR down',
+  DISP_IRUPTEMP : 'IR up',
+  DISP_PRECIPFEEDBACK_MASS : 'Precipitation mass',
+  DISP_PRECIPFEEDBACK_HEAT : 'Precip heat/cool',
+  DISP_PRECIPFEEDBACK_VAPOR : 'Condense/evaporate',
+  DISP_PRECIPFEEDBACK_RAIN : 'Rain deposition',
+  DISP_PRECIPFEEDBACK_SNOW : 'Snow deposition',
+  DISP_SOIL_MOISTURE : 'Soil moisture',
+  DISP_CURL : 'Curl',
+  DISP_HUMD : 'Humidity/clouds',
+  DISP_AIRQUALITY : 'Air quality'
+};
+
+const toolLabels = {
+  TOOL_NONE : 'Flashlight',
+  TOOL_TEMPERATURE : 'Temperature',
+  TOOL_WATER : 'Water vapor / cloud',
+  TOOL_WALL_LAND : 'Land',
+  TOOL_WALL_SEA : 'Lake / sea',
+  TOOL_WALL_URBAN : 'Urban',
+  TOOL_WALL_RUNWAY : 'Runway',
+  TOOL_WALL_INDUSTRIAL : 'Industrial',
+  TOOL_WALL_FIRE : 'Fire',
+  TOOL_SMOKE : 'Smoke / dust',
+  TOOL_WALL_MOIST : 'Soil moisture',
+  TOOL_VEGETATION : 'Vegetation',
+  TOOL_WALL_SNOW : 'Snow',
+  TOOL_WIND : 'Wind',
+  TOOL_STATION : 'Weather station'
+};
+
+function getHudLabel(map, value, fallbackPrefix)
+{
+  if (map[value])
+    return map[value];
+  return value ? value.replace(fallbackPrefix, '').replaceAll('_', ' ').trim() : '—';
+}
+
+function setSimHudVisibility(visible)
+{
+  if (!simHudEl)
+    simHudEl = document.getElementById('simHud');
+  if (!simHudEl)
+    return;
+  simHudEl.classList.toggle('hidden', !visible);
+}
+
+function updateSimulationHud()
+{
+  if (!guiControls)
+    return;
+
+  if (!simHudEl)
+    simHudEl = document.getElementById('simHud');
+  if (!simHudEl || simHudEl.classList.contains('hidden'))
+    return;
+
+  const setText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el)
+      el.textContent = text;
+  };
+
+  setText('simHudDisplay', getHudLabel(displayModeLabels, guiControls.displayMode, 'DISP_'));
+  setText('simHudTool', getHudLabel(toolLabels, guiControls.tool, 'TOOL_'));
+  setText('simHudBrush', guiControls.wholeWidth ? 'Whole width' : guiControls.brushSize.toFixed(0) + ' px @ ' + guiControls.brushIntensity.toFixed(3));
+  setText('simHudSpeed', guiControls.paused ? 'Paused' : guiControls.IterPerFrame + ' iter / frame');
+  setText('simHudPause', guiControls.paused ? 'Paused' : 'Running');
+  setText('simHudWrap', guiControls.wrapHorizontally ? 'Wrap on' : 'Wrap off');
+  setText('simHudDrops', guiControls.showDrops ? 'Drops visible' : 'Drops hidden');
+  setText('simHudClock', clockEl ? clockEl.textContent : 'Simulation');
+}
 
 const guiControls_default = {
   vorticity : 0.005,
@@ -1392,30 +1473,37 @@ class LoadingBar
 
     // create html
     this.loadingBar = document.createElement('div');
+    this.loadingBar.className = 'loading-overlay';
+
+    const card = document.createElement('div');
+    card.className = 'loading-card';
+    this.loadingBar.appendChild(card);
+
+    const title = document.createElement('h2');
+    title.textContent = 'Preparing simulation';
+    card.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.textContent = 'Compiling shaders, creating textures, and wiring the atmosphere together.';
+    card.appendChild(subtitle);
+
+    const track = document.createElement('div');
+    track.className = 'loading-progress-track';
+    card.appendChild(track);
+
     this.bar = document.createElement('div');
-    this.loadingBar.appendChild(this.bar);
+    this.bar.className = 'loading-progress-bar';
+    track.appendChild(this.bar);
 
-    this.underBar = document.createElement('div');
-    this.loadingBar.appendChild(this.underBar);
+    const meta = document.createElement('div');
+    meta.className = 'loading-meta';
+    card.appendChild(meta);
 
-    this.loadingBar.style.width = '100%';
-    this.loadingBar.style.height = '100px';
-    this.loadingBar.style.color = 'white';
-    this.loadingBar.style.textAlign = 'center';
-    this.loadingBar.style.lineHeight = '50px';
-    this.loadingBar.style.backgroundColor = 'gray';
-    this.loadingBar.style.marginTop = '400px';
-    this.loadingBar.style.position = 'absolute';
-    this.loadingBar.style.zIndex = '2';
+    this.percentLabel = document.createElement('span');
+    meta.appendChild(this.percentLabel);
 
-    this.underBar.style.width = '100%';
-    this.underBar.style.height = '50px';
-    this.underBar.style.backgroundColor = 'black';
-
-    this.bar.style.height = '50px';
-
-    this.bar.style.backgroundColor = 'green';
-    this.bar.style.fontSize = '20px';
+    this.underBar = document.createElement('span');
+    meta.appendChild(this.underBar);
 
     this.#update();
 
@@ -1438,7 +1526,7 @@ class LoadingBar
 
   async showError(error)
   {
-    this.bar.style.backgroundColor = 'red';
+    this.bar.style.background = 'linear-gradient(90deg, #ff5b73, #ff9a62)';
     this.description = error;
     await this.#update();
   }
@@ -1447,8 +1535,8 @@ class LoadingBar
   {
     return new Promise((resolve) => {
       this.bar.style.width = this.percent + '%';
-      this.bar.innerHTML = this.percent + ' %';
-      this.underBar.innerHTML = this.description;
+      this.percentLabel.textContent = this.percent + ' %';
+      this.underBar.textContent = this.description || 'Starting…';
       let timeout;
       if (this.percent == 100)
         timeout = 5;
@@ -3951,6 +4039,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     gl.useProgram(postProcessingProgram);
     gl.uniform1f(gl.getUniformLocation(postProcessingProgram, 'exposure'), guiControls.exposure);
     datGui.show(); // unhide
+    setSimHudVisibility(true);
 
     clockEl = document.createElement('div');
     document.body.appendChild(clockEl);
@@ -5503,7 +5592,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   {
     lightningTextures[i] = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, lightningTextures[i]);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, imgData.width, imgData.height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, imgData);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData);
     // gl.generateMipmap(gl.TEXTURE_2D);                                                // optional
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // LINEAR_MIPMAP_LINEAR
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -6703,10 +6792,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     gl.useProgram(skyBackgroundDisplayProgram);
     gl.uniform1f(gl.getUniformLocation(skyBackgroundDisplayProgram, 'minShadowLight'), minShadowLight);
 
-    if (guiControls.dayNightCycle)
+    if (guiControls.dayNightCycle) {
       clockEl.innerHTML = dateTimeStr(); // update clock
-    else
+    } else {
       clockEl.innerHTML = '';
+    }
+    updateSimulationHud();
   }
 
 
