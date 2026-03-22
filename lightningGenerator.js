@@ -56,10 +56,10 @@ function generateLightningBolt(width, height)
 
     ctx.lineWidth = Math.max(1.4, lineWidth * (1.0 - nextY / height * 0.55));
 
-    if (Math.random() < 0.02 * (1. - nextY / height)) { // branch
+    if (Math.random() < 0.035 * (1. - nextY / height * 0.6)) { // branch
       ctx.strokeStyle = genLightningColor(lineWidth, 0.9);
       ctx.stroke();
-      drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * 2.5, lineWidth * 0.5 * Math.random());
+      drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * 2.8, Math.max(1.1, lineWidth * mapBranchWidth(nextY / height)));
       ctx.beginPath();
       ctx.moveTo(nextX, nextY); // move back to last position after drawing branch
       ctx.lineWidth = lineWidth;
@@ -92,6 +92,8 @@ function generateLightningBolt(width, height)
   return output;
 
 
+  function mapBranchWidth(heightRatio) { return 0.30 + (1.0 - heightRatio) * 0.25; }
+
   function drawBranch(startX, startY, targetAngle, line_width)
   {
     let angle = targetAngle;
@@ -117,14 +119,14 @@ function generateLightningBolt(width, height)
 
       if (Math.random() < 0.018) { // reduce width
 
-        ctx.strokeStyle = genLightningColor(line_width, 0.55);
+        ctx.strokeStyle = genLightningColor(line_width, 0.75);
         ctx.stroke();
         line_width -= 0.28;
 
         if (line_width < 0.1)
           return;
 
-        if (Math.random() < 0.1) { // branch 0.005
+        if (Math.random() < 0.18) { // recursive branch
 
           drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * 1.5, line_width);
         }
@@ -134,7 +136,7 @@ function generateLightningBolt(width, height)
         ctx.lineWidth = line_width;
       }
     }
-    ctx.strokeStyle = genLightningColor(line_width, 0.55);
+    ctx.strokeStyle = genLightningColor(line_width, 0.75);
     ctx.stroke();
   }
 }
