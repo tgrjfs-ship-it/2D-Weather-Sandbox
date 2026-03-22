@@ -165,6 +165,20 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
   return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
 }
 
+vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeIntensity)
+{
+  vec2 cloudOffset = vec2(texCoord.x - pos.x, texCoord.y - pos.y * 0.78);
+  cloudOffset.x *= aspectRatios[0];
+
+  float densityFactor = clamp(strikeIntensity / CG_LIGHTNING_INTENSITY_THRESHOLD, 0.0, 1.4);
+  float spread = mix(0.028, 0.080, min(densityFactor, 1.0));
+  float glow = exp(-dot(cloudOffset, cloudOffset) / max(spread * spread, 0.0001));
+  float filament = sin((cloudOffset.x + cloudOffset.y) * 180.0 + iterNum * 0.35) * 0.5 + 0.5;
+  float pulse = 0.85 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.15;
+  vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.88, 0.93, 1.0), min(densityFactor, 1.0));
+  return icColor * glow * filament * pulse * 2600.0 * max(1.2 - lightningTime * 0.18, 0.0);
+}
+
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
 {
   vec2 lightningTexCoord = texCoord;
@@ -300,18 +314,26 @@ vec4 getAirColor(vec2 fragCoordIn)
   vec3 color = (smokeOrFireCol * smokeOpacity / opacity) + (cloudCol * cloudOpacity * (1. - smokeOpacity) / opacity); // color blending
 
 
-  vec4 lightningData = texture(lightningDataTex, vec2(0.5));
-  vec2 lightningPos = lightningData.xy;
-  float lightningStartIterNum = lightningData[START_ITERNUM];
+  vec4 lightningData0 = texelFetch(lightningDataTex, ivec2(0, 0), 0);
+  vec4 lightningData1 = texelFetch(lightningDataTex, ivec2(1, 0), 0);
 
-  float lightningTime = calcLightningTime(lightningStartIterNum);
-  float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
+  for (int strikeIndex = 0; strikeIndex < 2; strikeIndex++) {
+    vec4 lightningData = strikeIndex == 0 ? lightningData0 : lightningData1;
+    if (lightningData[START_ITERNUM] <= 0.0)
+      continue;
 
+    vec2 lightningPos = lightningData.xy;
+    float lightningTime = calcLightningTime(lightningData[START_ITERNUM]);
+    float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
 
-  if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
-    emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity, lightningData[INTENSITY]);
-    emittedLight /= 1. + cloudDensity * 100.0;
+    emittedLight += displayIntraCloudLightning(lightningPos, lightningTime, lightningData[INTENSITY]);
+
+    if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
+      emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity, lightningData[INTENSITY]);
+    }
   }
+
+  emittedLight /= 1. + cloudDensity * 100.0;
 
 #define lightningOnLightBrightness 0.004 // 0.002
 

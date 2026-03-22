@@ -335,6 +335,7 @@ var cam;
 var soundSystem;
 var simHudEl;
 var currentLightningProfile = null;
+var lightningHistoryData = new Float32Array(8);
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -422,6 +423,39 @@ function setWeatherStationsVisibility(visible)
 function setWindVectorVisibility(visible)
 {
   displayVectorField = visible ? 1.0 : 0.0;
+  updateSimulationHud();
+}
+
+function toggleSimPause()
+{
+  if (!guiControls)
+    return;
+  guiControls.paused = !guiControls.paused;
+  handlePause();
+  updateSimulationHud();
+}
+
+function toggleSimVectors()
+{
+  if (!guiControls)
+    return;
+  guiControls.showWindVectors = !guiControls.showWindVectors;
+  setWindVectorVisibility(guiControls.showWindVectors);
+}
+
+function toggleSimStations()
+{
+  if (!guiControls)
+    return;
+  guiControls.showWeatherStations = !guiControls.showWeatherStations;
+  setWeatherStationsVisibility(guiControls.showWeatherStations);
+}
+
+function toggleSimDrops()
+{
+  if (!guiControls)
+    return;
+  guiControls.showDrops = !guiControls.showDrops;
   updateSimulationHud();
 }
 
@@ -5439,7 +5473,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const lightTexture_1 = gl.createTexture();
   const precipitationFeedbackTexture = gl.createTexture();
   const precipitationDepositionTexture = gl.createTexture();
-  const lightningDataTexture = gl.createTexture(); // single pixel texture holding location and timing of current lightning strike
+  const lightningDetectionTexture = gl.createTexture();
+  const lightningDataTexture = gl.createTexture(); // 2-pixel history texture holding current and previous lightning strikes
   const initialProfileTexture = gl.createTexture();
   const realWorldSoundingTTexture = gl.createTexture();
   const realWorldSoundingWTexture = gl.createTexture();
@@ -5468,6 +5503,16 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const lightFrameBuff_1 = gl.createFramebuffer();
   const precipitationFeedbackFrameBuff = gl.createFramebuffer();
   const lightningDataFrameBuff = gl.createFramebuffer();
+
+  function uploadLightningHistoryTexture()
+  {
+    gl.bindTexture(gl.TEXTURE_2D, lightningDataTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
 
   function uploadProfileTexture(texture, values)
   {
@@ -6318,6 +6363,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
 
               if (Math.round(lightningDataValues[2]) == iterNum) {
+                lightningHistoryData.copyWithin(4, 0, 4);
+                lightningHistoryData.set(lightningDataValues, 0);
+                uploadLightningHistoryTexture();
+
                 currentLightningProfile = deriveLightningProfile(lightningDataValues[0], lightningDataValues[1], lightningDataValues[3]);
                 const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 26000.0, 0.65);
                 const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;

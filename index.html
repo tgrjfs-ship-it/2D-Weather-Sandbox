@@ -617,6 +617,7 @@
 
         .sim-hud-card {
             padding: 18px 20px;
+            pointer-events: auto;
         }
 
         .sim-hud-header {
@@ -652,6 +653,27 @@
             flex-wrap: wrap;
             gap: 8px;
             margin-bottom: 12px;
+        }
+
+        .sim-control-row {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .sim-control-btn {
+            border: 1px solid rgba(125, 176, 255, 0.2);
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+            border-radius: 12px;
+            padding: 10px 12px;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .sim-control-btn:hover {
+            background: rgba(74, 144, 226, 0.24);
         }
 
         .sim-hud-hints {
@@ -1047,6 +1069,12 @@
                 <div class="sim-hud-metric"><span class="sim-hud-label">Simulation rate</span><span id="simHudSpeed" class="sim-hud-value">—</span></div>
                 <div class="sim-hud-metric"><span class="sim-hud-label">Wind vectors</span><span id="simHudVectors" class="sim-hud-value">—</span></div>
                 <div class="sim-hud-metric"><span class="sim-hud-label">Lightning profile</span><span id="simHudLightning" class="sim-hud-value">—</span></div>
+            </div>
+            <div class="sim-control-row">
+                <button class="sim-control-btn" onclick="toggleSimPause()">Pause</button>
+                <button class="sim-control-btn" onclick="toggleSimVectors()">Vectors</button>
+                <button class="sim-control-btn" onclick="toggleSimStations()">Stations</button>
+                <button class="sim-control-btn" onclick="toggleSimDrops()">Drops</button>
             </div>
             <div class="sim-badges">
                 <span id="simHudPause" class="sim-badge">Running</span>
