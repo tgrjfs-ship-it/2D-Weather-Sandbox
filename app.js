@@ -334,6 +334,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var simHudEl;
+var performancePanelEl;
 var currentLightningProfile = null;
 var lightningHistoryData = new Float32Array(8);
 var latestLightningPos = null;
@@ -407,6 +408,11 @@ function setSimHudVisibility(visible)
   if (!simHudEl)
     return;
   simHudEl.classList.toggle('hidden', !visible);
+
+  if (!performancePanelEl)
+    performancePanelEl = document.getElementById('gameSpacePanel');
+  if (performancePanelEl)
+    performancePanelEl.classList.toggle('hidden', !visible);
 }
 
 function setWeatherStationsVisibility(visible)
@@ -501,6 +507,58 @@ function cycleDisplayMode()
   updateSimulationHud();
 }
 
+function setPerformancePreset(mode)
+{
+  if (!guiControls)
+    return;
+
+  if (mode == 'GX_ECO') {
+    guiControls.auto_IterPerFrame = false;
+    guiControls.IterPerFrame = 6;
+    guiControls.showDrops = false;
+    guiControls.showWindVectors = false;
+    guiControls.showGraph = false;
+  } else if (mode == 'GX_BALANCED') {
+    guiControls.auto_IterPerFrame = false;
+    guiControls.IterPerFrame = 10;
+    guiControls.showDrops = false;
+    guiControls.showWindVectors = true;
+  } else if (mode == 'GX_TURBO') {
+    guiControls.auto_IterPerFrame = false;
+    guiControls.IterPerFrame = 18;
+    guiControls.showDrops = true;
+    guiControls.showWindVectors = true;
+  } else if (mode == 'GX_AUTO') {
+    guiControls.auto_IterPerFrame = true;
+  }
+
+  hideOrShowGraph();
+  setWindVectorVisibility(guiControls.showWindVectors);
+  updateSimulationHud();
+  updatePerformancePanel(mode);
+}
+
+function updatePerformancePanel(activeMode)
+{
+  if (!performancePanelEl)
+    performancePanelEl = document.getElementById('gameSpacePanel');
+  if (!performancePanelEl)
+    return;
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el)
+      el.textContent = value;
+  };
+
+  const perfMode = activeMode || (guiControls.auto_IterPerFrame ? 'GX_AUTO' : guiControls.IterPerFrame >= 16 ? 'GX_TURBO' : guiControls.IterPerFrame <= 7 ? 'GX_ECO' : 'GX_BALANCED');
+  performancePanelEl.dataset.mode = perfMode;
+  setText('gxPerfMode', perfMode.replace('GX_', ''));
+  setText('gxPerfRate', guiControls.auto_IterPerFrame ? 'Auto' : guiControls.IterPerFrame + ' iter/frame');
+  setText('gxPerfVfx', (guiControls.showDrops ? 'Drops ' : 'No drops ') + (guiControls.showWindVectors ? '• vectors' : '• no vectors'));
+  setText('gxPerfGraph', guiControls.showGraph ? 'Graph live' : 'Graph hidden');
+}
+
 function deriveLightningProfile(x, y, intensity)
 {
   const densityFactor = Math.max(0.0, Math.min((intensity - 0.75) / 3.25, 1.0));
@@ -549,6 +607,7 @@ function updateSimulationHud()
   setText('simHudStations', guiControls.showWeatherStations ? 'Stations on' : 'Stations off');
   setText('simHudLightning', getLightningProfileLabel());
   setText('simHudClock', clockEl ? clockEl.textContent : 'Simulation');
+  updatePerformancePanel();
 }
 
 const guiControls_default = {

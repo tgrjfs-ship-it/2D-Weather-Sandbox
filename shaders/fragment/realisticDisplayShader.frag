@@ -337,12 +337,18 @@ vec4 getAirColor(vec2 fragCoordIn)
 
 #define lightningOnLightBrightness 0.004 // 0.002
 
-  vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
-  dist.x *= aspectRatios[0];
-  float lightningOnLight = lightningOnLightBrightness / (pow(length(dist), 2.) + 0.03);
-  lightningOnLight *= step(lightningTime, 6.0);
-  lightningOnLight *= currentLightningIntensity;
-  onLight += vec3(lightningOnLight);
+  vec4 activeLightning = lightningData0[START_ITERNUM] > lightningData1[START_ITERNUM] ? lightningData0 : lightningData1;
+  if (activeLightning[START_ITERNUM] > 0.0) {
+    vec2 lightningPos = activeLightning.xy;
+    float lightningTime = calcLightningTime(activeLightning[START_ITERNUM]);
+    float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, activeLightning[INTENSITY]);
+    vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
+    dist.x *= aspectRatios[0];
+    float lightningOnLight = lightningOnLightBrightness / (pow(length(dist), 2.) + 0.03);
+    lightningOnLight *= step(lightningTime, 6.0);
+    lightningOnLight *= currentLightningIntensity;
+    onLight += vec3(lightningOnLight);
+  }
 
   return vec4(color, opacity);
 }
