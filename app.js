@@ -334,7 +334,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var simHudEl;
-var introAmbientTimer = null;
+var currentLightningProfile = null;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -368,8 +368,8 @@ const loadingTips = [
   'Tip: higher horizontal resolution encourages broader converging flow and larger storm structures.',
   'Tip: press H in-sim to toggle the full control surface and rely on the compact command deck for quick reads.',
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
-  'Tip: colder cloud tops now push lightning toward hotter, brighter discharges.',
-  'Tip: use real-world soundings to seed environments, then fine-tune lightning temperature and branch energy in-sim.'
+  'Tip: denser storm cores now randomize lightning temperature automatically for each strike.',
+  'Tip: use real-world soundings to seed environments, then chase the density-driven lightning profiles in-sim.'
 ];
 
 const toolLabels = {
@@ -425,14 +425,25 @@ function setWindVectorVisibility(visible)
   updateSimulationHud();
 }
 
+function deriveLightningProfile(x, y, intensity)
+{
+  const densityFactor = Math.max(0.0, Math.min((intensity - 0.75) / 3.25, 1.0));
+  const rand = (value) => value - Math.floor(value);
+  const randomSeed = rand(Math.sin((x * 91.7 + y * 67.3 + intensity * 13.1) * 12.9898) * 43758.5453);
+  const branchNoise = rand(Math.sin((x * 41.3 + y * 103.9 + intensity * 7.7) * 78.233) * 24634.6345);
+  return {
+    densityFactor,
+    temperature : 14000.0 + (22000.0 * Math.min(densityFactor * 0.72 + randomSeed * 0.28, 1.0)),
+    branchFactor : 0.95 + (densityFactor * 0.75) + branchNoise * 0.3,
+  };
+}
+
 function getLightningProfileLabel()
 {
-  if (!guiControls)
-    return '—';
+  if (!currentLightningProfile)
+    return 'Auto / storm density';
 
-  const temp = Math.round(guiControls.lightningTemperature / 100.0) * 100;
-  const branch = guiControls.lightningBranchStrength.toFixed(2);
-  return temp.toLocaleString() + ' K • branch ×' + branch;
+  return Math.round(currentLightningProfile.temperature).toLocaleString() + ' K • auto';
 }
 
 function updateSimulationHud()
@@ -516,8 +527,6 @@ const guiControls_default = {
   showWindVectors : false,
   showStatusHud : true,
   showWeatherStations : true,
-  lightningTemperature : 26000.0,
-  lightningBranchStrength : 1.0,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : false,
@@ -1662,15 +1671,12 @@ function setLoadingBar()
 {
   return new Promise((resolve) => {
     var element = document.getElementById('IntroScreen');
-    if (introAmbientTimer != null) {
-      clearInterval(introAmbientTimer);
-      introAmbientTimer = null;
-    }
     if (element?.parentNode)
       element.parentNode.removeChild(element); // remove introscreen div
 
     document.body.classList.add('sim-loading-active');
     document.body.style.backgroundColor = 'black';
+    document.body.style.overflow = 'hidden';
 
     loadingBar = new LoadingBar(1);
 
@@ -3604,7 +3610,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   var airplane = new Airplane();
 
-  document.body.style.overflow = 'hidden'; // prevent scrolling bar from apearing
+  document.body.style.overflowX = 'hidden';
 
   canvas = document.getElementById('mainCanvas');
 
@@ -4016,9 +4022,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       .name('Evaporation Rate');
 
     precipitation_folder.add(guiControls, 'inactiveDroplets', 0, NUM_DROPLETS).listen().name('Inactive Droplets');
-
-    precipitation_folder.add(guiControls, 'lightningTemperature', 12000.0, 40000.0, 500.0).name('Lightning Temperature (K)').onChange(updateSimulationHud);
-    precipitation_folder.add(guiControls, 'lightningBranchStrength', 0.5, 2.0, 0.05).name('Lightning Branch Strength').onChange(updateSimulationHud);
 
     var display_folder = datGui.addFolder('Display');
 
@@ -5720,7 +5723,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       generateLightningTexture(i, imgElement.data);
     };
 
-    lightningGeneratorWorker.postMessage({width : 2500, height : 5000, branchStrength : guiControls.lightningBranchStrength}); // 10000 5000
+    lightningGeneratorWorker.postMessage({width : 2500, height : 5000, branchStrength : 1.45}); // 10000 5000
   }
 
   await loadingBar.set(90, 'Setting up FBO`s');
@@ -5926,8 +5929,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'lightningDataTex'), 8);
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'ambientLightTex'), 9);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), 0.0);
-  gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTemperature'), guiControls.lightningTemperature);
-  gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningBranchStrength'), guiControls.lightningBranchStrength);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'dryLapse'), dryLapse);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'cellHeight'), cellHeight);
 
@@ -6317,9 +6318,11 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
 
               if (Math.round(lightningDataValues[2]) == iterNum) {
-                const lightningThermalBoost = Math.max(guiControls.lightningTemperature / 26000.0, 0.65);
+                currentLightningProfile = deriveLightningProfile(lightningDataValues[0], lightningDataValues[1], lightningDataValues[3]);
+                const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 26000.0, 0.65);
                 const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;
-                cam.triggerShake(lightningDataValues[3] * guiControls.lightningBranchStrength);
+                cam.triggerShake(lightningDataValues[3] * currentLightningProfile.branchFactor);
+                updateSimulationHud();
                 if (guiControls.sound) {
                   soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], lightningIntensity);
                 }
@@ -6528,8 +6531,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'Xmult'), horizontalDisplayMult);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'iterNum'), iterNum);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), loadedLightningTextures > 0 ? 1.0 : 0.0);
-      gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTemperature'), guiControls.lightningTemperature);
-      gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningBranchStrength'), guiControls.lightningBranchStrength);
 
       // Don't display vectors when zoomed out because you would just see noise
       if (cam.curZoom / sim_res_x > 0.003) {

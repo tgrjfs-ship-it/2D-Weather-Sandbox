@@ -42,8 +42,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 0rem 2rem 0rem 2rem;
-            background: rgba(0, 0, 0, 0.13);
-            backdrop-filter: blur(10px);
+            background: rgba(5, 10, 24, 0.92);
             z-index: 0;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         }
@@ -302,11 +301,10 @@
         .sim-hud-card,
         .loading-card,
         .loading-side-card {
-            background: rgba(8, 17, 34, 0.74);
+            background: #0d1a31;
             border: 1px solid rgba(125, 176, 255, 0.18);
             border-radius: 24px;
-            backdrop-filter: blur(18px);
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
         }
 
         .launch-deck {
@@ -580,7 +578,7 @@
         }
 
         .dg.main {
-            background: rgba(8, 17, 34, 0.78) !important;
+            background: #0d1a31 !important;
             border: 1px solid rgba(125, 176, 255, 0.18) !important;
             border-radius: 18px !important;
             overflow: hidden !important;
@@ -1062,40 +1060,6 @@
                 <span><strong>N</strong> weather stations</span>
                 <span><strong>Space</strong> pause / resume</span>
                 <span><strong>B + wheel</strong> brush size</span>
-                <span><strong>1–9</strong> change display</span>
-            </div>
-        </div>
-    </div>
-    <canvas id="graphCanvas"></canvas>
-
-    <canvas id="dropletInfoCanvas" width="90" height="50"
-        style="z-index: 1; position: absolute; left: 50%; top: 50%;"></canvas>
-    <canvas id="mainCanvas">
-        Your browser does not support HTML5, you must be using a really old browser!
-    </canvas>
-    <div id="simHud" class="sim-hud hidden">
-        <div class="sim-hud-card">
-            <div class="sim-hud-header">
-                <h3 class="sim-hud-title">Simulation quick controls</h3>
-                <span id="simHudClock" class="sim-badge">Preparing…</span>
-            </div>
-            <div class="sim-hud-grid">
-                <div class="sim-hud-metric"><span class="sim-hud-label">Display mode</span><span id="simHudDisplay" class="sim-hud-value">—</span></div>
-                <div class="sim-hud-metric"><span class="sim-hud-label">Active tool</span><span id="simHudTool" class="sim-hud-value">—</span></div>
-                <div class="sim-hud-metric"><span class="sim-hud-label">Brush</span><span id="simHudBrush" class="sim-hud-value">—</span></div>
-                <div class="sim-hud-metric"><span class="sim-hud-label">Simulation rate</span><span id="simHudSpeed" class="sim-hud-value">—</span></div>
-            </div>
-            <div class="sim-badges">
-                <span id="simHudPause" class="sim-badge">Running</span>
-                <span id="simHudWrap" class="sim-badge">Wrap on</span>
-                <span id="simHudDrops" class="sim-badge">Drops visible</span>
-            </div>
-            <div class="sim-hud-hints">
-                <span><strong>H</strong> toggle full controls</span>
-                <span><strong>Space</strong> pause / resume</span>
-                <span><strong>Mouse wheel</strong> zoom</span>
-                <span><strong>B + wheel</strong> brush size</span>
-                <span><strong>Q–\</strong> change tools</span>
                 <span><strong>1–9</strong> change display</span>
             </div>
         </div>

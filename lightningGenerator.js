@@ -56,10 +56,10 @@ function generateLightningBolt(width, height, branchStrength = 1.0)
 
     ctx.lineWidth = Math.max(1.4, lineWidth * (1.0 - nextY / height * 0.55));
 
-    if (Math.random() < (0.028 + branchStrength * 0.018) * (1. - nextY / height * 0.55)) { // branch
+    if (Math.random() < (0.040 + branchStrength * 0.022) * (1. - nextY / height * 0.45)) { // branch
       ctx.strokeStyle = genLightningColor(lineWidth, 0.9);
       ctx.stroke();
-      drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * (2.4 + branchStrength * 0.9), Math.max(1.15, lineWidth * mapBranchWidth(nextY / height)));
+      drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * (2.9 + branchStrength * 1.0), Math.max(1.45, lineWidth * mapBranchWidth(nextY / height)));
       ctx.beginPath();
       ctx.moveTo(nextX, nextY); // move back to last position after drawing branch
       ctx.lineWidth = lineWidth;
@@ -92,7 +92,7 @@ function generateLightningBolt(width, height, branchStrength = 1.0)
   return output;
 
 
-  function mapBranchWidth(heightRatio) { return 0.34 + (1.0 - heightRatio) * 0.30 * branchStrength; }
+  function mapBranchWidth(heightRatio) { return 0.42 + (1.0 - heightRatio) * 0.34 * branchStrength; }
 
   function drawBranch(startX, startY, targetAngle, line_width)
   {
@@ -117,16 +117,16 @@ function generateLightningBolt(width, height, branchStrength = 1.0)
       startX = nextX;
       startY = nextY;
 
-      if (Math.random() < 0.022) { // reduce width
+      if (Math.random() < 0.028) { // reduce width
 
         ctx.strokeStyle = genLightningColor(line_width, 0.75);
         ctx.stroke();
-        line_width -= 0.22;
+        line_width -= 0.18;
 
         if (line_width < 0.1)
           return;
 
-        if (Math.random() < 0.16 + branchStrength * 0.08) { // recursive branch
+        if (Math.random() < 0.24 + branchStrength * 0.10) { // recursive branch
 
           drawBranch(nextX, nextY, targetAngle + (Math.random() - 0.5) * (1.6 + branchStrength * 0.45), Math.max(0.35, line_width * 0.92));
         }
