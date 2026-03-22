@@ -5364,6 +5364,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   const lightningTextures = [];
   const numLightningTextures = 10;
+  let loadedLightningTextures = 0;
 
 
   frameBuff_0 = gl.createFramebuffer(); // global for weather stations
@@ -5619,6 +5620,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    loadedLightningTextures = Math.min(loadedLightningTextures + (lightningTextures[i] ? 1 : 0), numLightningTextures);
   }
 
 
@@ -5835,6 +5837,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'lightningTex'), 7);
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'lightningDataTex'), 8);
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'ambientLightTex'), 9);
+  gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), 0.0);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'dryLapse'), dryLapse);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'cellHeight'), cellHeight);
 
@@ -6433,6 +6436,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.uniform4f(gl.getUniformLocation(realisticDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'Xmult'), horizontalDisplayMult);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'iterNum'), iterNum);
+      gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), loadedLightningTextures > 0 ? 1.0 : 0.0);
 
       // Don't display vectors when zoomed out because you would just see noise
       if (cam.curZoom / sim_res_x > 0.003) {

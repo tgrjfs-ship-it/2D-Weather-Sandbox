@@ -50,6 +50,7 @@ uniform vec4 cursor; // Xpos   Ypos  Size   type
 uniform float displayVectorField;
 
 uniform float iterNum;
+uniform float lightningTextureReady;
 
 out vec4 fragmentColor;
 
@@ -117,6 +118,21 @@ float calcLightningTime(float startIterNum)
   return (lightningTime + 0.9) / 2.0; // accelerate initial flash so strikes are visible immediately
 }
 
+float proceduralLightningMask(vec2 lightningTexCoord, vec2 lightningPos)
+{
+  float sway = sin(lightningTexCoord.y * 34.0 + lightningPos.x * 120.0) * 0.035;
+  sway += sin(lightningTexCoord.y * 87.0 + lightningPos.y * 200.0) * 0.012;
+
+  float branch = sin(lightningTexCoord.y * 56.0 + lightningPos.x * 310.0) * 0.06;
+  branch *= smoothstep(0.18, 0.78, lightningTexCoord.y) * (1.0 - smoothstep(0.68, 0.98, lightningTexCoord.y));
+
+  float trunkWidth = mix(0.022, 0.004, lightningTexCoord.y);
+  float trunk = smoothstep(trunkWidth, trunkWidth * 0.18, abs((lightningTexCoord.x - 0.5) - sway));
+  float sideBranch = smoothstep(0.018, 0.003, abs((lightningTexCoord.x - 0.5) - sway - branch)) * 0.65;
+
+  return max(trunk, sideBranch);
+}
+
 float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
 {
   float T0 = Tin - 1.;
@@ -150,14 +166,15 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
     return vec3(0);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
-  float texMask = smoothstep(0.16, 0.42, lightningTexel.a);
+  float texMask = smoothstep(0.12, 0.32, lightningTexel.a);
   float boltCore = max(max(lightningTexel.r, lightningTexel.g), lightningTexel.b);
-  float glow = lightningTexel.a * 0.45;
-  float pixVal = mix(boltCore, glow, 0.22) * texMask;
+  float glow = lightningTexel.a * 0.35;
+  float proceduralMask = proceduralLightningMask(lightningTexCoord, pos);
+  float pixVal = max(mix(boltCore, glow, 0.15) * texMask * lightningTextureReady, proceduralMask * 0.75);
 
   const float branchShowFactor = 2.1;      // 1.5
-  const float leaderBrightness = 12000.;    // 200.0
-  const float mainBoltBrightness = 65000.;  // 100000.
+  const float leaderBrightness = 18000.;   // 200.0
+  const float mainBoltBrightness = 85000.; // 100000.
 
   float brightnessThreshold = 1. - lightningTime * branchShowFactor;
   brightnessThreshold += lightningTexCoord.y * branchShowFactor; // grow from the top to the bottem
@@ -165,7 +182,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   brightnessThreshold = clamp(brightnessThreshold, 0., 1.);
 
   if (lightningTime > 1.0) { // main bolt
-    brightnessThreshold = 0.82;
+    brightnessThreshold = 0.58;
     currentLightningIntensity *= mainBoltBrightness;
   } else {
     currentLightningIntensity = leaderBrightness;
