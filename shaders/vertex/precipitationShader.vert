@@ -137,7 +137,7 @@ void main()
             feedback.xy = texCoord;
             feedback[START_ITERNUM] = iterNum;
             float icVsCgNoise = random2d(texCoord * 12.1 + vec2(iterNum * 0.01, cloudPlusPrecipDensity));
-            feedback[INTENSITY] = clamp(cloudPlusPrecipDensity / 8.0 + (icVsCgNoise - 0.60) * 1.45, 0.30, 4.0);
+            feedback[INTENSITY] = clamp(cloudPlusPrecipDensity / 8.0 + (icVsCgNoise - 0.10) * 1.45, 0.30, 4.0);
             gl_Position = vec4(vec2(-1. + texelSize.x * 3., -1. + texelSize.y), 0.0, 1.0); // render to bottem left corner (1, 0)
           }
         } else {
