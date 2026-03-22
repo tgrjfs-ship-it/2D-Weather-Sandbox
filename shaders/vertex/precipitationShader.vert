@@ -120,8 +120,8 @@ void main()
 
           vec4 lightningData = texelFetch(lightningDataTex, ivec2(0, 0), 0); // data from last lightning bolt
 
-          const float lightningCloudDensityThreshold = 2.2;          // 3.0
-          const float lightningChanceMultiplier = 0.0105;            // 0.0011
+          const float lightningCloudDensityThreshold = 0.2;          // 3.0
+          const float lightningChanceMultiplier = 10.5;            // 0.0011
 
           float cloudPlusPrecipDensity = water[CLOUD] + water[PRECIPITATION];
 
@@ -130,7 +130,7 @@ void main()
           const float minIterationsSinceLastLightningBolt = 1.; // 50.
 
           if (lightningData[START_ITERNUM] < iterNum - minIterationsSinceLastLightningBolt &&
-              random2d(vec2(base[TEMPERATURE] * 0.95, water[TOTAL] * 7.7)) < lightningSpawnChance) { // Spawn lightning
+              random2d(vec2(base[TEMPERATURE] * 10.12, water[TOTAL] * 27.7)) < lightningSpawnChance) { // Spawn lightning
             lightningSpawned = true;
             isActive = false;
             gl_PointSize = 1.0;
