@@ -69,9 +69,23 @@ void exchangeWith(vec2 texCoord) // exchange temperature and water
 }
 
 
-float calcEvaporation(float T, float W, float V, float M)                                             // temperature, total water, vegetation, soil moisture
+float calcLandEvaporation(float T, float W, float V, float M, float sunlight) // temperature, total water, vegetation, soil moisture, sunlight
 {
-  return max((maxWater(T) - W) * landEvaporation * (V / 127. + 0.1) * min(M + 1.0, 50.0) * 0.05, 0.); // landEvaporation should be adjusted to remove * 0.05 factor
+  float humidityDeficit = max(maxWater(T) - W, 0.0);
+  float vegetationResponse = 0.35 + V / 127.0 * 0.80;
+  float moistureResponse = sqrt(clamp((M + 1.0) / 40.0, 0.0, 1.0));
+  float temperatureResponse = map_rangeC(T, CtoK(-5.0), CtoK(35.0), 0.20, 1.45);
+  float solarResponse = 0.55 + sunlight / standardSunBrightness * 0.90;
+  return humidityDeficit * landEvaporation * vegetationResponse * moistureResponse * temperatureResponse * solarResponse * 0.035;
+}
+
+float calcWaterEvaporation(float T, float W, float sunlight, vec2 velocity)
+{
+  float humidityDeficit = max(maxWater(T) - W, 0.0);
+  float temperatureResponse = map_rangeC(T, CtoK(0.0), CtoK(35.0), 0.40, 1.70);
+  float solarResponse = 0.70 + sunlight / standardSunBrightness * 0.95;
+  float windResponse = 0.85 + min(length(velocity) * 8.0, 1.4);
+  return humidityDeficit * waterEvaporation * temperatureResponse * solarResponse * windResponse;
 }
 
 float calcFireIntensity(int veg, float moist, float precip) { return max(float(veg) * 0.00025 - moist * 0.00020 - precip * 0.02, 0.); }
@@ -354,7 +368,7 @@ void main()
       case WALLTYPE_LAND:
         if (wall[VERT_DISTANCE] <= wallVerticalInfluence) {
 
-          float evaporation = calcEvaporation(realTemp, water[TOTAL], float(wall[VEGETATION]), waterInSurface[SOIL_MOISTURE]) / influenceDevider;
+          float evaporation = calcLandEvaporation(realTemp, water[TOTAL], float(wall[VEGETATION]), waterInSurface[SOIL_MOISTURE], light[SUNLIGHT]) / influenceDevider;
 
           water[TOTAL] += evaporation;
           base[TEMPERATURE] -= evaporation * evapHeat * 0.5;                                // evaporative cooling (half the real value, to prevent boring non convective conditions)
@@ -369,7 +383,7 @@ void main()
           float LocalWaterTemperature = texture(baseTex, texCoordX0Ym)[TEMPERATURE];                                       // water temperature
           base[TEMPERATURE] += (LocalWaterTemperature - realTemp - 1.0) / influenceDevider * waterHeatExchangeRate;        // air heated or cooled by water
 
-          water[TOTAL] += max((maxWater(LocalWaterTemperature) - water[TOTAL]) * waterEvaporation / influenceDevider, 0.); // water evaporating
+          water[TOTAL] += calcWaterEvaporation(LocalWaterTemperature, water[TOTAL], light[SUNLIGHT], base.xy) / influenceDevider; // water evaporating
         }
         break;
       }
@@ -426,7 +440,7 @@ void main()
 
         float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
 
-        float evaporation = calcEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE]) * 0.10;
+        float evaporation = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]) * 0.10;
 
         water[SOIL_MOISTURE] -= evaporation;
 
@@ -509,7 +523,7 @@ void main()
           netWaterHeating += (airTemperature - base[TEMPERATURE]) * waterHeatExchangeRate; // water heated or cooled by the air above
 
           netWaterHeating -=
-            max((maxWater(base[TEMPERATURE]) - waterX0Yp[TOTAL]) * waterEvaporation, 0.) * evapHeat * 0.5; // evaporative cooling (half the real value, to prevent boring non convective conditions)
+            calcWaterEvaporation(base[TEMPERATURE], waterX0Yp[TOTAL], lightAboveSurface[SUNLIGHT], baseAboveSurface.xy) * evapHeat * 0.5; // evaporative cooling (half the real value, to prevent boring non convective conditions)
 
           float lightPower = max(lightAboveSurface[SUNLIGHT] * cos(sunAngle), 0.0);                        // Light power per horizontal surface area;
 

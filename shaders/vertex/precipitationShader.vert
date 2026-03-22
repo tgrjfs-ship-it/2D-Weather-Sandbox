@@ -130,7 +130,7 @@ void main()
           const float minIterationsSinceLastLightningBolt = 1.; // 50.
 
           if (lightningData[START_ITERNUM] < iterNum - minIterationsSinceLastLightningBolt &&
-              random2d(vec2(base[TEMPERATURE] * 0.2324, water[TOTAL] * 7.7)) < lightningSpawnChance) { // Spawn lightning
+              random2d(vec2(base[TEMPERATURE] * 0.95, water[TOTAL] * 7.7)) < lightningSpawnChance) { // Spawn lightning
             lightningSpawned = true;
             isActive = false;
             gl_PointSize = 1.0;
