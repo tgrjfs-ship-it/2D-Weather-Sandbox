@@ -368,10 +368,11 @@ void main()
       case WALLTYPE_LAND:
         if (wall[VERT_DISTANCE] <= wallVerticalInfluence) {
 
-          float evaporation = calcLandEvaporation(realTemp, water[TOTAL], float(wall[VEGETATION]), waterInSurface[SOIL_MOISTURE], light[SUNLIGHT]) / influenceDevider;
+          float landEvap = calcLandEvaporation(realTemp, water[TOTAL], float(wall[VEGETATION]), waterInSurface[SOIL_MOISTURE], light[SUNLIGHT]);
+          float evaporation = landEvap / influenceDevider;
 
           water[TOTAL] += evaporation;
-          base[TEMPERATURE] -= evaporation * evapHeat * 0.5;                                // evaporative cooling (half the real value, to prevent boring non convective conditions)
+          base[TEMPERATURE] -= evaporation * evapHeat * 0.5; // evaporative cooling (half the real value, to prevent boring non convective conditions)
 
           if (wall[VEGETATION] < 10 && water[SOIL_MOISTURE] < 5.0) {                        // Dry desert area
             water[SMOKE] = min(water[SMOKE] + (max(abs(base[VX]) - 0.12, 0.) * 0.15), 2.4); // Dust blowing up with wind
@@ -380,10 +381,12 @@ void main()
         break;
       case WALLTYPE_WATER:
         if (wall[VERT_DISTANCE] <= wallVerticalInfluence) {
-          float LocalWaterTemperature = texture(baseTex, texCoordX0Ym)[TEMPERATURE];                                       // water temperature
-          base[TEMPERATURE] += (LocalWaterTemperature - realTemp - 1.0) / influenceDevider * waterHeatExchangeRate;        // air heated or cooled by water
+          float localWaterTemperature = texture(baseTex, texCoordX0Ym)[TEMPERATURE];
+          float waterTempDelta = (localWaterTemperature - realTemp - 1.0) / influenceDevider;
+          float waterEvap = calcWaterEvaporation(localWaterTemperature, water[TOTAL], light[SUNLIGHT], base.xy);
 
-          water[TOTAL] += calcWaterEvaporation(LocalWaterTemperature, water[TOTAL], light[SUNLIGHT], base.xy) / influenceDevider; // water evaporating
+          base[TEMPERATURE] += waterTempDelta * waterHeatExchangeRate;
+          water[TOTAL] += waterEvap / influenceDevider;
         }
         break;
       }
@@ -440,7 +443,8 @@ void main()
 
         float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
 
-        float evaporation = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]) * 0.10;
+        float surfaceLandEvap = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]);
+        float evaporation = surfaceLandEvap * 0.10;
 
         water[SOIL_MOISTURE] -= evaporation;
 

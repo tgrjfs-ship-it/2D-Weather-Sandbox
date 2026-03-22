@@ -333,8 +333,6 @@ var SETUP_MODE = false;
 var loadingBar;
 var cam;
 var soundSystem;
-var simHudEl;
-var performancePanelEl;
 var currentLightningProfile = null;
 var lightningHistoryData = new Float32Array(8);
 var latestLightningPos = null;
@@ -370,10 +368,10 @@ const displayModeLabels = {
 
 const loadingTips = [
   'Tip: higher horizontal resolution encourages broader converging flow and larger storm structures.',
-  'Tip: press H in-sim to toggle the full control surface and rely on the compact command deck for quick reads.',
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
   'Tip: denser storm cores now randomize lightning temperature automatically for each strike.',
-  'Tip: use real-world soundings to seed environments, then chase the density-driven lightning profiles in-sim.'
+  'Tip: use real-world soundings to seed environments, then chase the density-driven lightning profiles in-sim.',
+  'Tip: try the Random Stuff folder for quick low-stakes shakeups of time, brush settings, or display mode.'
 ];
 
 const toolLabels = {
@@ -394,170 +392,7 @@ const toolLabels = {
   TOOL_STATION : 'Weather station'
 };
 
-function getHudLabel(map, value, fallbackPrefix)
-{
-  if (map[value])
-    return map[value];
-  return value ? value.replace(fallbackPrefix, '').replaceAll('_', ' ').trim() : '—';
-}
-
-function setSimHudVisibility(visible)
-{
-  if (!simHudEl)
-    simHudEl = document.getElementById('simHud');
-  if (!simHudEl)
-    return;
-  simHudEl.classList.toggle('hidden', !visible);
-
-  if (!performancePanelEl)
-    performancePanelEl = document.getElementById('gameSpacePanel');
-  if (performancePanelEl)
-    performancePanelEl.classList.toggle('hidden', !visible);
-}
-
-function setWeatherStationsVisibility(visible)
-{
-  displayWeatherStations = visible;
-  for (let i = 0; i < weatherStations.length; i++) {
-    weatherStations[i].setHidden(!visible);
-  }
-
-  if (!visible && guiControls?.tool == 'TOOL_STATION')
-    guiControls.tool = 'TOOL_NONE';
-
-  updateSimulationHud();
-}
-
-function setWindVectorVisibility(visible)
-{
-  displayVectorField = visible ? 1.0 : 0.0;
-  updateSimulationHud();
-}
-
-function toggleSimPause()
-{
-  if (!guiControls)
-    return;
-  guiControls.paused = !guiControls.paused;
-  handlePause();
-  updateSimulationHud();
-}
-
-function toggleSimVectors()
-{
-  if (!guiControls)
-    return;
-  guiControls.showWindVectors = !guiControls.showWindVectors;
-  setWindVectorVisibility(guiControls.showWindVectors);
-}
-
-function toggleSimStations()
-{
-  if (!guiControls)
-    return;
-  guiControls.showWeatherStations = !guiControls.showWeatherStations;
-  setWeatherStationsVisibility(guiControls.showWeatherStations);
-}
-
-function toggleSimDrops()
-{
-  if (!guiControls)
-    return;
-  guiControls.showDrops = !guiControls.showDrops;
-  updateSimulationHud();
-}
-
-function stepSimulationOnce()
-{
-  if (!guiControls)
-    return;
-  simStepRequested = true;
-  guiControls.paused = true;
-  handlePause();
-  updateSimulationHud();
-}
-
-function resetSimulationView()
-{
-  cam?.center();
-}
-
-function toggleSimGraph()
-{
-  if (!guiControls)
-    return;
-  guiControls.showGraph = !guiControls.showGraph;
-  hideOrShowGraph();
-}
-
-function focusLatestLightning()
-{
-  if (!latestLightningPos || !cam)
-    return;
-  cam.setPosition(-latestLightningPos.x * 2.0 + 1.0, -latestLightningPos.y * 2.0 * (sim_res_y / sim_res_x) + (sim_res_y / sim_res_x), cam.curZoom);
-}
-
-function cycleDisplayMode()
-{
-  if (!guiControls)
-    return;
-  const displayModes = Object.keys(displayModeLabels);
-  const currentIndex = displayModes.indexOf(guiControls.displayMode);
-  guiControls.displayMode = displayModes[(currentIndex + 1 + displayModes.length) % displayModes.length];
-  updateSimulationHud();
-}
-
-function setPerformancePreset(mode)
-{
-  if (!guiControls)
-    return;
-
-  if (mode == 'GX_ECO') {
-    guiControls.auto_IterPerFrame = false;
-    guiControls.IterPerFrame = 6;
-    guiControls.showDrops = false;
-    guiControls.showWindVectors = false;
-    guiControls.showGraph = false;
-  } else if (mode == 'GX_BALANCED') {
-    guiControls.auto_IterPerFrame = false;
-    guiControls.IterPerFrame = 10;
-    guiControls.showDrops = false;
-    guiControls.showWindVectors = true;
-  } else if (mode == 'GX_TURBO') {
-    guiControls.auto_IterPerFrame = false;
-    guiControls.IterPerFrame = 18;
-    guiControls.showDrops = true;
-    guiControls.showWindVectors = true;
-  } else if (mode == 'GX_AUTO') {
-    guiControls.auto_IterPerFrame = true;
-  }
-
-  hideOrShowGraph();
-  setWindVectorVisibility(guiControls.showWindVectors);
-  updateSimulationHud();
-  updatePerformancePanel(mode);
-}
-
-function updatePerformancePanel(activeMode)
-{
-  if (!performancePanelEl)
-    performancePanelEl = document.getElementById('gameSpacePanel');
-  if (!performancePanelEl)
-    return;
-
-  const setText = (id, value) => {
-    const el = document.getElementById(id);
-    if (el)
-      el.textContent = value;
-  };
-
-  const perfMode = activeMode || (guiControls.auto_IterPerFrame ? 'GX_AUTO' : guiControls.IterPerFrame >= 16 ? 'GX_TURBO' : guiControls.IterPerFrame <= 7 ? 'GX_ECO' : 'GX_BALANCED');
-  performancePanelEl.dataset.mode = perfMode;
-  setText('gxPerfMode', perfMode.replace('GX_', ''));
-  setText('gxPerfRate', guiControls.auto_IterPerFrame ? 'Auto' : guiControls.IterPerFrame + ' iter/frame');
-  setText('gxPerfVfx', (guiControls.showDrops ? 'Drops ' : 'No drops ') + (guiControls.showWindVectors ? '• vectors' : '• no vectors'));
-  setText('gxPerfGraph', guiControls.showGraph ? 'Graph live' : 'Graph hidden');
-}
+function updateSimulationHud() {}
 
 function deriveLightningProfile(x, y, intensity)
 {
@@ -577,44 +412,6 @@ function deriveLightningProfile(x, y, intensity)
   };
 }
 
-function getLightningProfileLabel()
-{
-  if (!currentLightningProfile)
-    return 'Auto / storm density';
-
-  const flashType = currentLightningProfile.densityFactor < 0.20 ? 'IC' : 'CG';
-  return Math.round(currentLightningProfile.temperature).toLocaleString() + ' K • ' + flashType;
-}
-
-function updateSimulationHud()
-{
-  if (!guiControls)
-    return;
-
-  if (!simHudEl)
-    simHudEl = document.getElementById('simHud');
-  if (!simHudEl || simHudEl.classList.contains('hidden'))
-    return;
-
-  const setText = (id, text) => {
-    const el = document.getElementById(id);
-    if (el)
-      el.textContent = text;
-  };
-
-  setText('simHudDisplay', getHudLabel(displayModeLabels, guiControls.displayMode, 'DISP_'));
-  setText('simHudTool', getHudLabel(toolLabels, guiControls.tool, 'TOOL_'));
-  setText('simHudBrush', guiControls.wholeWidth ? 'Whole width' : guiControls.brushSize.toFixed(0) + ' px @ ' + guiControls.brushIntensity.toFixed(3));
-  setText('simHudSpeed', guiControls.paused ? 'Paused' : guiControls.IterPerFrame + ' iter / frame');
-  setText('simHudPause', guiControls.paused ? 'Paused' : 'Running');
-  setText('simHudWrap', guiControls.wrapHorizontally ? 'Wrap on' : 'Wrap off');
-  setText('simHudDrops', guiControls.showDrops ? 'Drops visible' : 'Drops hidden');
-  setText('simHudVectors', guiControls.showWindVectors ? 'Vectors on' : 'Vectors off');
-  setText('simHudStations', guiControls.showWeatherStations ? 'Stations on' : 'Stations off');
-  setText('simHudLightning', getLightningProfileLabel());
-  setText('simHudClock', clockEl ? clockEl.textContent : 'Simulation');
-  updatePerformancePanel();
-}
 
 const guiControls_default = {
   vorticity : 0.005,
@@ -666,7 +463,6 @@ const guiControls_default = {
   allowCaves : true,
   showGraph : false,
   showWindVectors : false,
-  showStatusHud : true,
   showWeatherStations : true,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
@@ -3854,7 +3650,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     cam.smooth = guiControls.SmoothCam;
     setWindVectorVisibility(guiControls.showWindVectors);
     setWeatherStationsVisibility(guiControls.showWeatherStations);
-    setSimHudVisibility(guiControls.showStatusHud && !SETUP_MODE);
 
     if (guiControls.wrapHorizontally)
       horizontalDisplayMult = 3.0;
@@ -3869,6 +3664,19 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
     // add functions to guicontrols object
     guiControls.download = function() { prepareDownload(); };
+    guiControls.randomizeTimeOfDay = function() {
+      guiControls.timeOfDay = Math.random() * 24.0;
+      onUpdateTimeOfDaySlider();
+    };
+    guiControls.randomizeBrush = function() {
+      guiControls.wholeWidth = false;
+      guiControls.brushSize = Math.round(5 + Math.random() * 115);
+      guiControls.brushIntensity = Math.round((0.002 + Math.random() * 0.048) * 1000) / 1000;
+    };
+    guiControls.randomizeDisplayMode = function() {
+      const displayModes = Object.keys(displayModeLabels);
+      guiControls.displayMode = displayModes[Math.floor(Math.random() * displayModes.length)];
+    };
 
     guiControls.resetSettings = function() {
       if (confirm('Are you sure you want to reset all settings to default?')) {
@@ -4213,7 +4021,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
-    display_folder.add(guiControls, 'showStatusHud').onChange(function() { setSimHudVisibility(guiControls.showStatusHud); }).name('Show Status HUD').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
@@ -4261,6 +4068,11 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       });
 
 
+    var randomStuff_folder = datGui.addFolder('Random Stuff');
+    randomStuff_folder.add(guiControls, 'randomizeTimeOfDay').name('Randomize Time');
+    randomStuff_folder.add(guiControls, 'randomizeBrush').name('Randomize Brush');
+    randomStuff_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
+
     var advanced_folder = datGui.addFolder('Advanced');
 
     advanced_folder.add(guiControls, 'enablePrecipitation')
@@ -4305,7 +4117,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     gl.useProgram(postProcessingProgram);
     gl.uniform1f(gl.getUniformLocation(postProcessingProgram, 'exposure'), guiControls.exposure);
     datGui.show(); // unhide
-    setSimHudVisibility(guiControls.showStatusHud);
 
     clockEl = document.createElement('div');
     document.body.appendChild(clockEl);
@@ -4731,7 +4542,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   });
 
   window.addEventListener('wheel', function(event) {
-    if (event.target.closest('.dg') || event.target.closest('#simHud') || event.target.closest('input') || event.target.closest('select') || event.target.closest('button'))
+    if (event.target.closest('.dg') || event.target.closest('input') || event.target.closest('select') || event.target.closest('button'))
       return;
 
     var delta = 0.1;
