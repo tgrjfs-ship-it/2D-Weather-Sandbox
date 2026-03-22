@@ -146,11 +146,13 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   lightningTexCoord.x += 0.5;                                                                                               // center lightning bolt
 
-  if (lightningTexCoord.x < 0.01 || lightningTexCoord.x > 1.01 || lightningTexCoord.y < 0.01 || lightningTexCoord.y > 1.01) // prevent edge effect when mipmapping
+  if (lightningTexCoord.x < 0.02 || lightningTexCoord.x > 0.98 || lightningTexCoord.y < 0.02 || lightningTexCoord.y > 0.98) // reject edge samples to prevent boxed artifacts
     return vec3(0);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
+  float texMask = smoothstep(0.10, 0.35, lightningTexel.a);
   float pixVal = max(max(lightningTexel.r, lightningTexel.g), max(lightningTexel.b, lightningTexel.a));
+  pixVal *= texMask;
 
   const float branchShowFactor = 2.1;      // 1.5
   const float leaderBrightness = 12000.;    // 200.0

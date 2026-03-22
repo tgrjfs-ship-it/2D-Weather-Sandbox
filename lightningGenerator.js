@@ -66,7 +66,24 @@ function generateLightningBolt(width, height)
   ctx.stroke();
 
 
-  return ctx.getImageData(0, 0, width, height);
+  const output = ctx.getImageData(0, 0, width, height);
+  const data = output.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const luminance = Math.max(data[i], data[i + 1], data[i + 2]);
+    const alpha = data[i + 3];
+
+    if (alpha < 10 || luminance < 12) {
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = 0;
+    } else {
+      data[i + 3] = Math.max(alpha, luminance);
+    }
+  }
+
+  return output;
 
 
   function drawBranch(startX, startY, targetAngle, line_width)
