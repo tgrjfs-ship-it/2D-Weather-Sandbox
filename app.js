@@ -336,6 +336,8 @@ var soundSystem;
 var simHudEl;
 var currentLightningProfile = null;
 var lightningHistoryData = new Float32Array(8);
+var latestLightningPos = null;
+var simStepRequested = false;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -456,6 +458,46 @@ function toggleSimDrops()
   if (!guiControls)
     return;
   guiControls.showDrops = !guiControls.showDrops;
+  updateSimulationHud();
+}
+
+function stepSimulationOnce()
+{
+  if (!guiControls)
+    return;
+  simStepRequested = true;
+  guiControls.paused = true;
+  handlePause();
+  updateSimulationHud();
+}
+
+function resetSimulationView()
+{
+  cam?.center();
+}
+
+function toggleSimGraph()
+{
+  if (!guiControls)
+    return;
+  guiControls.showGraph = !guiControls.showGraph;
+  hideOrShowGraph();
+}
+
+function focusLatestLightning()
+{
+  if (!latestLightningPos || !cam)
+    return;
+  cam.setPosition(-latestLightningPos.x * 2.0 + 1.0, -latestLightningPos.y * 2.0 * (sim_res_y / sim_res_x) + (sim_res_y / sim_res_x), cam.curZoom);
+}
+
+function cycleDisplayMode()
+{
+  if (!guiControls)
+    return;
+  const displayModes = Object.keys(displayModeLabels);
+  const currentIndex = displayModes.indexOf(guiControls.displayMode);
+  guiControls.displayMode = displayModes[(currentIndex + 1 + displayModes.length) % displayModes.length];
   updateSimulationHud();
 }
 
@@ -4624,6 +4666,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   });
 
   window.addEventListener('wheel', function(event) {
+    if (event.target.closest('.dg') || event.target.closest('#simHud') || event.target.closest('input') || event.target.closest('select') || event.target.closest('button'))
+      return;
+
     var delta = 0.1;
     if (event.deltaY > 0)
       delta *= -1;
@@ -6180,7 +6225,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       // guiControls.IterPerFrame = 1.0 / timePerIteration * 3600 / 60.0;
 
 
-      if (!guiControls.paused) { // Simulation part
+      if (!guiControls.paused || simStepRequested) { // Simulation part
+
+        simStepRequested = false;
 
         let nightAccelerationActive = !airplaneMode && guiControls.dayNightCycle && guiControls.accelerateNight && guiControls.sunAngle < 0.;
 
@@ -6367,6 +6414,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 lightningHistoryData.set(lightningDataValues, 0);
                 uploadLightningHistoryTexture();
 
+                latestLightningPos = {x : lightningDataValues[0], y : lightningDataValues[1]};
                 currentLightningProfile = deriveLightningProfile(lightningDataValues[0], lightningDataValues[1], lightningDataValues[3]);
                 const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 26000.0, 0.65);
                 const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;

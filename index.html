@@ -581,7 +581,9 @@
             background: #0d1a31 !important;
             border: 1px solid rgba(125, 176, 255, 0.18) !important;
             border-radius: 18px !important;
-            overflow: hidden !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            max-height: calc(100vh - 28px) !important;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
         }
 
@@ -657,7 +659,7 @@
 
         .sim-control-row {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 8px;
             margin-bottom: 12px;
         }
@@ -1072,9 +1074,14 @@
             </div>
             <div class="sim-control-row">
                 <button class="sim-control-btn" onclick="toggleSimPause()">Pause</button>
+                <button class="sim-control-btn" onclick="stepSimulationOnce()">Step</button>
+                <button class="sim-control-btn" onclick="resetSimulationView()">Reset View</button>
                 <button class="sim-control-btn" onclick="toggleSimVectors()">Vectors</button>
                 <button class="sim-control-btn" onclick="toggleSimStations()">Stations</button>
                 <button class="sim-control-btn" onclick="toggleSimDrops()">Drops</button>
+                <button class="sim-control-btn" onclick="toggleSimGraph()">Graph</button>
+                <button class="sim-control-btn" onclick="focusLatestLightning()">Focus Lightning</button>
+                <button class="sim-control-btn" onclick="cycleDisplayMode()">Next Display</button>
             </div>
             <div class="sim-badges">
                 <span id="simHudPause" class="sim-badge">Running</span>
