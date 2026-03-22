@@ -3784,6 +3784,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     UI_folder.add(guiControls, 'brushSize', 1, 200, 1).name('Brush Diameter').listen();
     UI_folder.add(guiControls, 'wholeWidth').name('Whole Width Brush').listen();
     UI_folder.add(guiControls, 'brushIntensity', 0.005, 0.05, 0.001).name('Brush Intensity');
+    UI_folder.add(guiControls, 'randomizeBrush').name('Randomize Brush');
     UI_folder.add(guiControls, 'allowCaves')
       .onChange(function() {
         gl.useProgram(boundaryProgram);
@@ -3812,6 +3813,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       .listen();
 
     radiation_folder.add(guiControls, 'sunIntensity', 0.0, 2.0, 0.01).onChange(function() { updateSunlight('MANUAL_ANGLE'); }).name('Sun Intensity');
+    radiation_folder.add(guiControls, 'randomizeTimeOfDay').name('Randomize Time');
 
     radiation_folder.add(guiControls, 'greenhouseGases', 0.0, 0.01, 0.0001)
       .onChange(function() {
@@ -4004,6 +4006,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       .name('Exposure');
 
     display_folder.add(guiControls, 'camSpeed', 0.001, 0.050, 0.001).name('Camera Pan Speed');
+    display_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
 
 
     display_folder.add(guiControls, 'wrapHorizontally')
@@ -4068,10 +4071,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       });
 
 
-    var randomStuff_folder = datGui.addFolder('Random Stuff');
-    randomStuff_folder.add(guiControls, 'randomizeTimeOfDay').name('Randomize Time');
-    randomStuff_folder.add(guiControls, 'randomizeBrush').name('Randomize Brush');
-    randomStuff_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
 
     var advanced_folder = datGui.addFolder('Advanced');
 
