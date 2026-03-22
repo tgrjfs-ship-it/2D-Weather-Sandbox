@@ -371,7 +371,7 @@ const loadingTips = [
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
   'Tip: denser storm cores now randomize lightning temperature automatically for each strike.',
   'Tip: use real-world soundings to seed environments, then chase the density-driven lightning profiles in-sim.',
-  'Tip: try the Random Stuff folder for quick low-stakes shakeups of time, brush settings, or display mode.'
+  'Tip: use the built-in randomize controls in the main UI folders for fast time, brush, and display experiments.'
 ];
 
 const toolLabels = {
@@ -392,7 +392,112 @@ const toolLabels = {
   TOOL_STATION : 'Weather station'
 };
 
-function updateSimulationHud() {}
+var simulationHud = null;
+var simulationHudHideTimer = null;
+
+function animateUiElement(element, className = 'ui-pulse')
+{
+  if (!element)
+    return;
+
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
+}
+
+function ensureSimulationHud()
+{
+  if (simulationHud)
+    return simulationHud;
+
+  const shell = document.createElement('div');
+  shell.id = 'simulationHud';
+  shell.className = 'simulation-hud';
+  shell.innerHTML = `
+    <div class="sim-hud-card sim-hud-primary">
+      <span class="sim-hud-label">Simulation HUD</span>
+      <strong class="sim-hud-value" data-hud-field="displayMode">Temperature</strong>
+      <p class="sim-hud-hints" data-hud-field="tool">Tool: Flashlight</p>
+    </div>
+    <div class="sim-hud-grid">
+      <div class="sim-hud-card">
+        <span class="sim-hud-label">Visuals</span>
+        <strong class="sim-hud-value" data-hud-field="visuals">Vectors Off · Drops Off</strong>
+        <p class="sim-hud-hints">Tab toggles vectors. D toggles droplets.</p>
+      </div>
+      <div class="sim-hud-card">
+        <span class="sim-hud-label">Observers</span>
+        <strong class="sim-hud-value" data-hud-field="observers">Stations Hidden</strong>
+        <p class="sim-hud-hints">N hides stations. M arms the station tool.</p>
+      </div>
+      <div class="sim-hud-card">
+        <span class="sim-hud-label">Lightning</span>
+        <strong class="sim-hud-value" data-hud-field="lightning">Awaiting strike</strong>
+        <p class="sim-hud-hints">Strong, dense cores now drive hotter lightning visuals.</p>
+      </div>
+    </div>`;
+
+  document.body.appendChild(shell);
+  simulationHud = {
+    shell,
+    displayMode : shell.querySelector('[data-hud-field="displayMode"]'),
+    tool : shell.querySelector('[data-hud-field="tool"]'),
+    visuals : shell.querySelector('[data-hud-field="visuals"]'),
+    observers : shell.querySelector('[data-hud-field="observers"]'),
+    lightning : shell.querySelector('[data-hud-field="lightning"]')
+  };
+
+  return simulationHud;
+}
+
+function showSimulationHudPulse()
+{
+  const hud = ensureSimulationHud();
+  hud.shell.classList.add('visible');
+  animateUiElement(hud.shell, 'ui-pulse');
+  clearTimeout(simulationHudHideTimer);
+  simulationHudHideTimer = setTimeout(() => {
+    hud.shell.classList.remove('visible');
+  }, 2200);
+}
+
+function updateSimulationHud()
+{
+  if (SETUP_MODE || !guiControls)
+    return;
+
+  const hud = ensureSimulationHud();
+  const displayLabel = displayModeLabels[guiControls.displayMode] || guiControls.displayMode || 'Temperature';
+  const toolLabel = toolLabels[guiControls.tool] || guiControls.tool || 'Flashlight';
+  const weatherStationCount = weatherStations.length;
+  const lightningSummary = latestLightningPos && currentLightningProfile ? Math.round(currentLightningProfile.temperature) + ' K strike' : 'Awaiting strike';
+
+  hud.displayMode.textContent = displayLabel;
+  hud.tool.textContent = 'Tool: ' + toolLabel;
+  hud.visuals.textContent = 'Vectors ' + (guiControls.showWindVectors ? 'On' : 'Off') + ' · Drops ' + (guiControls.showDrops ? 'On' : 'Off');
+  hud.observers.textContent = weatherStationCount + ' station' + (weatherStationCount == 1 ? '' : 's') + ' · ' + (guiControls.showWeatherStations ? 'Visible' : 'Hidden');
+  hud.lightning.textContent = lightningSummary;
+  hud.shell.classList.toggle('compact', !guiControls.showWindVectors && !guiControls.showWeatherStations);
+
+  showSimulationHudPulse();
+}
+
+function setWindVectorVisibility(visible)
+{
+  displayVectorField = !!visible;
+  if (guiControls)
+    guiControls.showWindVectors = !!visible;
+  updateSimulationHud();
+}
+
+function setWeatherStationsVisibility(visible)
+{
+  const hideStations = !visible;
+  weatherStations.forEach((station) => station.setHidden(hideStations));
+  if (guiControls)
+    guiControls.showWeatherStations = !!visible;
+  updateSimulationHud();
+}
 
 function deriveLightningProfile(x, y, intensity)
 {
@@ -1493,6 +1598,11 @@ class LoadingBar
     progressHeader.className = 'loading-progress-header';
     card.appendChild(progressHeader);
 
+    const visual = document.createElement('div');
+    visual.className = 'loading-visual';
+    visual.innerHTML = '<div class="loading-orbit loading-orbit-one"></div><div class="loading-orbit loading-orbit-two"></div><div class="loading-core"></div>';
+    card.appendChild(visual);
+
     this.percentLabel = document.createElement('strong');
     this.percentLabel.className = 'loading-percent';
     progressHeader.appendChild(this.percentLabel);
@@ -1516,6 +1626,10 @@ class LoadingBar
     this.tipEl = document.createElement('p');
     this.tipEl.className = 'loading-tip';
     card.appendChild(this.tipEl);
+
+    this.phaseRail = document.createElement('div');
+    this.phaseRail.className = 'loading-phase-rail';
+    card.appendChild(this.phaseRail);
 
     const sidePanel = document.createElement('div');
     sidePanel.className = 'loading-side-panel';
@@ -1571,6 +1685,7 @@ class LoadingBar
       const safePercent = Math.max(0, Math.min(this.percent, 100));
       const description = this.description || 'Booting weather systems';
       const stage = safePercent < 20 ? 'Boot sequence' : safePercent < 45 ? 'Compiling renderer' : safePercent < 70 ? 'Uploading simulation data' : safePercent < 95 ? 'Finalizing control deck' : 'Launch ready';
+      const phaseIndex = safePercent < 20 ? 0 : safePercent < 45 ? 1 : safePercent < 70 ? 2 : safePercent < 95 ? 3 : 4;
 
       this.bar.style.width = safePercent + '%';
       this.percentLabel.textContent = safePercent + '%';
@@ -1578,6 +1693,14 @@ class LoadingBar
       this.tipEl.textContent = loadingTips[Math.floor(safePercent / 20) % loadingTips.length];
       this.focusLabel.textContent = description;
       this.focusCopy.textContent = isError ? 'Startup stopped due to an error. Review the message and retry once the missing asset or server issue is resolved.' : 'Current stage: ' + description + '. The launch deck keeps the most important startup state visible while the app prepares simulation resources.';
+
+      this.phaseRail.innerHTML = '';
+      [ 'Boot', 'Shaders', 'Textures', 'Controls', 'Ready' ].forEach((label, index) => {
+        const phase = document.createElement('div');
+        phase.className = 'loading-phase' + (index < phaseIndex ? ' is-complete' : index == phaseIndex ? ' is-active' : '');
+        phase.innerHTML = '<span></span><strong>' + label + '</strong>';
+        this.phaseRail.appendChild(phase);
+      });
 
       this.metaGrid.innerHTML = '';
       [
@@ -1600,6 +1723,10 @@ class LoadingBar
   {
     if (this.loadingBar?.parentNode)
       this.loadingBar.parentNode.removeChild(this.loadingBar);
+
+    document.body.classList.remove('sim-loading-active');
+    ensureSimulationHud();
+    updateSimulationHud();
   }
 }
 
