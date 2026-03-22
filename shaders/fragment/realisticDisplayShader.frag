@@ -200,11 +200,13 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float curveSeedA = random2d(pos * 91.7 + vec2(strikeIntensity, 0.0));
   float curveSeedB = random2d(pos.yx * 63.1 + vec2(0.0, strikeIntensity));
   float curveSeedC = random2d(pos * 127.4 + vec2(1.7, 2.3));
+  float curveSeedD = random2d(pos.yx * 153.2 + vec2(4.1, 0.7));
 
-  float coreCurve = sin(boltCoord.y * mix(11.0, 23.0, curveSeedA) + curveSeedB * PI * 2.0) * mix(0.035, 0.085, densityFactor);
-  coreCurve += sin(boltCoord.y * mix(21.0, 39.0, curveSeedB) + curveSeedC * PI * 2.0) * mix(0.018, 0.050, densityFactor);
-  coreCurve += sin(boltCoord.y * mix(37.0, 61.0, curveSeedC) + curveSeedA * PI * 2.0) * 0.014;
-  boltCoord.x += coreCurve;
+  float macroCurve = (boltCoord.y - 0.5) * mix(-0.22, 0.22, curveSeedA);
+  float coreCurve = sin(boltCoord.y * mix(7.0, 14.0, curveSeedA) + curveSeedB * PI * 2.0) * mix(0.050, 0.120, densityFactor);
+  coreCurve += sin(boltCoord.y * mix(17.0, 31.0, curveSeedB) + curveSeedC * PI * 2.0) * mix(0.030, 0.080, densityFactor);
+  coreCurve += sin(boltCoord.y * mix(33.0, 57.0, curveSeedC) + curveSeedD * PI * 2.0) * 0.020;
+  boltCoord.x += macroCurve + coreCurve;
 
   vec4 texLightning = texture(lightningTex, boltCoord);
   float texCore = max(max(texLightning.r, texLightning.g), texLightning.b) * smoothstep(0.08, 0.24, texLightning.a);
