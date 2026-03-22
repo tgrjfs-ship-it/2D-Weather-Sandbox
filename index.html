@@ -285,7 +285,7 @@
         a { color: #d8ecff; }
 
         .page-shell {
-            max-width: 1320px;
+            max-width: 1420px;
             margin: 0 auto;
             padding: 110px 24px 40px;
         }
@@ -297,94 +297,176 @@
             border-radius: 0;
         }
 
-        .hero-card,
+        .launch-deck,
         .glass-card,
-        .sim-hud-card {
-            background: rgba(8, 17, 34, 0.72);
+        .sim-hud-card,
+        .loading-card,
+        .loading-side-card {
+            background: rgba(8, 17, 34, 0.74);
             border: 1px solid rgba(125, 176, 255, 0.18);
-            border-radius: 22px;
-            backdrop-filter: blur(16px);
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+            border-radius: 24px;
+            backdrop-filter: blur(18px);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
         }
 
-        .hero-card {
-            padding: 28px 32px;
+        .launch-deck {
+            overflow: hidden;
             margin-bottom: 24px;
         }
 
-        .hero-kicker {
-            display: inline-flex;
-            padding: 6px 12px;
-            border-radius: 999px;
-            background: rgba(74, 144, 226, 0.16);
-            color: #9dd0ff;
-            font-size: 0.8rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 12px;
+        .launch-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+            gap: 22px;
+            padding: 32px;
+            background: linear-gradient(135deg, rgba(15, 36, 72, 0.92), rgba(8, 17, 34, 0.72));
         }
 
-        .hero-title {
-            margin: 0;
-            font-size: clamp(2.3rem, 5vw, 4.3rem);
-            line-height: 1.04;
+        .launch-title {
+            margin: 10px 0 12px;
+            font-size: clamp(2.6rem, 5vw, 4.8rem);
+            line-height: 0.98;
             max-width: 11ch;
         }
 
-        .hero-copy {
-            max-width: 64ch;
-            color: rgba(255,255,255,0.82);
-            margin: 12px 0 0;
+        .launch-copy {
+            max-width: 66ch;
+            color: rgba(255, 255, 255, 0.8);
+            margin: 0;
         }
 
+        .launch-kicker,
+        .loading-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(74, 144, 226, 0.18);
+            color: #9ed2ff;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .launch-actions,
         .hero-stats,
         .intro-grid,
         .info-grid,
         .help-grid,
-        .sim-hud-grid {
+        .sim-hud-grid,
+        .load-grid,
+        .loading-content,
+        .loading-meta-grid {
             display: grid;
             gap: 18px;
         }
 
-        .hero-stats {
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            margin-top: 22px;
+        .launch-actions {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            margin-top: 20px;
         }
 
-        .stat-tile {
+        .launch-action {
             padding: 16px 18px;
             border-radius: 18px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .stat-tile strong {
+        .launch-action strong,
+        .launch-side-stat strong,
+        .sim-hud-value,
+        .loading-meta-item strong {
             display: block;
-            font-size: 1.3rem;
+            font-size: 1rem;
+            font-weight: 700;
         }
 
-        .intro-grid {
-            grid-template-columns: minmax(360px, 1.1fr) minmax(280px, 0.9fr);
-            align-items: start;
-            margin-bottom: 24px;
+        .launch-side-panel {
+            display: grid;
+            gap: 14px;
+        }
+
+        .launch-side-card {
+            padding: 18px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .launch-side-label,
+        .sim-hud-label,
+        .loading-side-label,
+        .loading-stage {
+            display: block;
+            color: rgba(255, 255, 255, 0.68);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 4px;
+        }
+
+        .launch-side-card p,
+        .launch-action span,
+        .card-subtitle,
+        .sim-hud-hints,
+        .loading-card p,
+        .loading-side-card p {
+            color: rgba(255, 255, 255, 0.76);
+        }
+
+        .launch-side-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .launch-side-stat {
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(3, 9, 20, 0.5);
+        }
+
+        .launch-deck-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+            gap: 22px;
+            padding: 24px;
         }
 
         .glass-card { padding: 24px; }
 
         .card-title {
             margin: 0 0 8px;
-            font-size: 1.4rem;
-        }
-
-        .card-subtitle {
-            margin: 0 0 18px;
-            color: rgba(255,255,255,0.72);
+            font-size: 1.45rem;
         }
 
         .setup-stack,
-        .stack-sm {
+        .stack-sm,
+        .launch-checklist,
+        .control-board,
+        .status-strip,
+        .preview-overview {
             display: grid;
             gap: 14px;
+        }
+
+        .control-board {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+
+        .setup-panel,
+        .preview-panel {
+            display: grid;
+            gap: 16px;
+        }
+
+        .setup-subgrid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
         }
 
         .preview-frame {
@@ -393,9 +475,9 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            border-radius: 18px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            background: radial-gradient(circle at top, rgba(81, 143, 255, 0.12), rgba(255, 255, 255, 0.04));
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         #soundingPreview {
@@ -403,6 +485,25 @@
             height: auto;
             max-height: 520px;
             object-fit: contain;
+        }
+
+        .preview-overview {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .preview-pill,
+        .status-pill,
+        .sim-badge {
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .preview-pill strong,
+        .status-pill strong {
+            display: block;
+            margin-bottom: 4px;
         }
 
         .control-row {
@@ -431,6 +532,10 @@
             vertical-align: middle;
         }
 
+        .status-strip {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
+
         .primary-cta {
             display: flex;
             flex-wrap: wrap;
@@ -444,6 +549,7 @@
             font-size: 0.95rem;
         }
 
+        .load-grid,
         .info-grid,
         .help-grid {
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -504,7 +610,7 @@
             left: 16px;
             bottom: 16px;
             z-index: 3;
-            width: min(420px, calc(100vw - 32px));
+            width: min(560px, calc(100vw - 32px));
             color: #fff;
             pointer-events: none;
         }
@@ -512,7 +618,7 @@
         .sim-hud.hidden { display: none; }
 
         .sim-hud-card {
-            padding: 16px 18px;
+            padding: 18px 20px;
         }
 
         .sim-hud-header {
@@ -520,7 +626,7 @@
             justify-content: space-between;
             gap: 12px;
             align-items: baseline;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
 
         .sim-hud-title {
@@ -532,7 +638,7 @@
         }
 
         .sim-hud-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             margin-bottom: 12px;
         }
 
@@ -543,20 +649,6 @@
             border: 1px solid rgba(255,255,255,0.06);
         }
 
-        .sim-hud-label {
-            display: block;
-            color: rgba(255,255,255,0.68);
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 4px;
-        }
-
-        .sim-hud-value {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
         .sim-badges {
             display: flex;
             flex-wrap: wrap;
@@ -564,20 +656,11 @@
             margin-bottom: 12px;
         }
 
-        .sim-badge {
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 0.8rem;
-            background: rgba(74, 144, 226, 0.16);
-            border: 1px solid rgba(125, 176, 255, 0.18);
-        }
-
         .sim-hud-hints {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 8px 12px;
             font-size: 0.88rem;
-            color: rgba(255,255,255,0.82);
         }
 
         .loading-overlay {
@@ -588,16 +671,39 @@
             align-items: center;
             justify-content: center;
             padding: 24px;
-            background: radial-gradient(circle at top, rgba(37, 80, 152, 0.22), rgba(4, 8, 20, 0.94) 55%);
+            background: radial-gradient(circle at top, rgba(37, 80, 152, 0.24), rgba(4, 8, 20, 0.96) 55%);
         }
 
-        .loading-card {
-            width: min(620px, 100%);
-            padding: 28px;
-            border-radius: 24px;
-            background: rgba(8, 17, 34, 0.88);
-            border: 1px solid rgba(125, 176, 255, 0.18);
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+        .loading-shell {
+            width: min(1120px, 100%);
+            display: grid;
+            gap: 20px;
+        }
+
+        .loading-masthead h2 {
+            margin: 10px 0 8px;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+        }
+
+        .loading-content {
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            align-items: start;
+        }
+
+        .loading-card,
+        .loading-side-card {
+            padding: 26px;
+        }
+
+        .loading-progress-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .loading-percent {
+            font-size: clamp(2.4rem, 5vw, 4rem);
         }
 
         .loading-progress-track {
@@ -607,55 +713,65 @@
             border-radius: 999px;
             background: rgba(255,255,255,0.08);
             border: 1px solid rgba(255,255,255,0.06);
-            margin: 16px 0 10px;
+            margin: 16px 0 12px;
         }
 
         .loading-progress-bar {
             height: 100%;
             width: 0%;
             border-radius: inherit;
-            background: linear-gradient(90deg, #3d90ff, #7ecbff);
+            background: linear-gradient(90deg, #3d90ff, #7ecbff, #9ee6ff);
             transition: width 0.18s ease;
         }
 
-        .loading-meta {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            color: rgba(255,255,255,0.78);
-            font-size: 0.95rem;
+        .loading-meta-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            margin-top: 14px;
+        }
+
+        .loading-meta-item {
+            padding: 14px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .loading-meta-item span {
+            display: block;
+            margin-bottom: 4px;
+            color: rgba(255,255,255,0.68);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 0.76rem;
+        }
+
+        .loading-side-panel {
+            display: grid;
+            gap: 16px;
+        }
+
+        .loading-checklist {
+            margin: 10px 0 0;
+            padding-left: 18px;
         }
 
         .loading-tip {
-            margin: 14px 0 0;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.92rem;
-        }
-
-        .launch-checklist {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-top: 18px;
-        }
-
-        .launch-item {
-            padding: 12px 14px;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.07);
-            color: rgba(255,255,255,0.84);
+            margin: 16px 0 0;
             font-size: 0.95rem;
         }
 
+        .sim-loading-active::before {
+            background: linear-gradient(180deg, rgba(1, 4, 10, 0.96), rgba(4, 8, 20, 0.96));
+        }
+
         @media (max-width: 980px) {
-            .intro-grid { grid-template-columns: 1fr; }
+            .launch-hero, .launch-deck-grid, .intro-grid, .setup-subgrid, .loading-content { grid-template-columns: 1fr; }
             .main-nav { padding: 0.8rem 1rem; }
             .nav-title h1 { font-size: 1.35rem; }
             .nav-icons { gap: 0.75rem; padding-top: 0.5rem; }
             .nav-icons img { height: 36px; }
             .page-shell { padding-top: 92px; }
-            .sim-hud-hints, .sim-hud-grid { grid-template-columns: 1fr; }
+            .sim-hud-hints, .sim-hud-grid, .preview-overview, .loading-meta-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -682,105 +798,143 @@
     </nav>
 
     <div class="page-shell"><div id="IntroScreen">
-        <section class="hero-card">
-            <span class="hero-kicker">Atmospheric sandbox</span>
-            <h2 class="hero-title">Build storms, sculpt terrain, and fly through a living 2D atmosphere.</h2>
-            <p class="hero-copy">Launch a new world from presets or real-world soundings, tune the simulation resolution before startup, and use the in-sim control surface for rapid iteration once the weather engine is running.</p>
-            <div class="hero-stats">
-                <div class="stat-tile"><strong>Realtime or accelerated</strong><span>Scale from interactive experimentation to dense storm evolution.</span></div>
-                <div class="stat-tile"><strong>Real sounding input</strong><span>Seed the sandbox from observed atmospheric profiles.</span></div>
-                <div class="stat-tile"><strong>Visual weather lab</strong><span>Switch among physical and diagnostic display modes while editing the world.</span></div>
+        <section class="launch-deck">
+            <div class="launch-hero">
+                <div>
+                    <span class="launch-kicker">Next-gen weather sandbox launch deck</span>
+                    <h2 class="launch-title">Design storms faster with a rebuilt intro flow, control deck, and lightning system.</h2>
+                    <p class="launch-copy">This launch experience is now organized like a mission control surface: choose a scenario, inspect the sounding, tune the domain, then enter a simulation HUD built for rapid editing, diagnostics, and storm chasing.</p>
+                    <div class="launch-actions">
+                        <div class="launch-action"><strong>Scenario-first startup</strong><span>Pick presets, real-world soundings, or saves from a clearer launch deck.</span></div>
+                        <div class="launch-action"><strong>Simulation command deck</strong><span>Read display mode, tools, wind vectors, stations, and lightning state at a glance.</span></div>
+                        <div class="launch-action"><strong>Dynamic lightning model</strong><span>Drive hotter/cooler lightning looks and stronger branching directly from the upgraded controls.</span></div>
+                    </div>
+                </div>
+                <div class="launch-side-panel">
+                    <div class="launch-side-card">
+                        <span class="launch-side-label">Launch checklist</span>
+                        <div class="launch-checklist">
+                            <div class="launch-item">1. Choose a preset or sounding profile.</div>
+                            <div class="launch-item">2. Set the resolution and atmosphere height budget.</div>
+                            <div class="launch-item">3. Launch into the sim and tune vectors, stations, and lightning live.</div>
+                        </div>
+                    </div>
+                    <div class="launch-side-card">
+                        <span class="launch-side-label">What changed</span>
+                        <div class="launch-side-stats">
+                            <div class="launch-side-stat"><strong>New intro UX</strong><span>Mission-style layout with clearer startup decisions.</span></div>
+                            <div class="launch-side-stat"><strong>New loading overlay</strong><span>Progress stages, pipeline status, and startup focus notes.</span></div>
+                            <div class="launch-side-stat"><strong>New sim HUD</strong><span>More status visibility without needing the full GUI open.</span></div>
+                            <div class="launch-side-stat"><strong>Lightning temperature</strong><span>Hotter discharges with stronger visual dynamics.</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="launch-checklist">
-                <div class="launch-item">1. Pick a preset or sounding.</div>
-                <div class="launch-item">2. Set your resolution budget.</div>
-                <div class="launch-item">3. Start the sim, then use the HUD for quick reads.</div>
+
+            <div class="launch-deck-grid">
+                <section class="glass-card setup-panel">
+                    <div>
+                        <h3 class="card-title">Create a new simulation</h3>
+                        <p class="card-subtitle">Build a world from presets or inject a real sounding profile, then shape the simulation domain before launch.</p>
+                    </div>
+
+                    <div class="setup-subgrid">
+                        <div class="control-board">
+                            <div>
+                                <label class="field-label" for="presetSelect">Preset scenario</label>
+                                <select id="presetSelect"></select>
+                            </div>
+                            <div>
+                                <label class="field-label" for="stationSelect">Sounding station</label>
+                                <select id="stationSelect"></select>
+                            </div>
+                            <div>
+                                <label class="field-label" for="datePicker">Observed date</label>
+                                <input type="date" id="datePicker" value="2025-06-15" min="2010-01-01" onchange="prepareSounding();" />
+                            </div>
+                            <div>
+                                <label class="field-label" for="hourSelector">Sounding cycle</label>
+                                <select id="hourSelector" onchange="prepareSounding();">
+                                    <option value="0">00H</option>
+                                    <option value="6">06H</option>
+                                    <option value="12" selected>12H</option>
+                                    <option value="18">18H</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="launch-side-card">
+                            <span class="launch-side-label">Startup guidance</span>
+                            <p>Use a real sounding when you want believable large-scale structure, then use the in-sim lightning controls to tune branching energy and discharge temperature.</p>
+                        </div>
+                    </div>
+
+                    <form id="startBtn" oninput="updateSetupSliders();" class="setup-stack">
+                        <div class="resolution-warning">
+                            <p>Choose a resolution budget. Higher horizontal resolution expands storm organization; taller or denser domains are more demanding but can support deeper convection and better lightning staging.</p>
+                        </div>
+
+                        <table class="slider-table">
+                            <tr>
+                                <td><b>Horizontal resolution</b></td>
+                                <td style="width: 30%">
+                                    <input type="range" min="100" max="16000" value="3000" step="100" id="simResSelX" />
+                                    <output id="simResShowX"></output>
+                                </td>
+                                <td id="simWorldProperties" style="color:rgb(255, 255, 255); width: 50%">Cellheight: 40m Sim width: 40 km</td>
+                            </tr>
+                            <tr>
+                                <td><b>Vertical resolution</b></td>
+                                <td>
+                                    <input type="range" min="100" max="500" value="300" step="10" id="simResSelY" />
+                                    <output id="simResShowY"></output>
+                                </td>
+                                <td><i id="simResYWarning" style="color:rgb(255, 61, 61); display: none;">Vertical resolutions other than 300 are not optimized and may be buggy!</i></td>
+                            </tr>
+                            <tr>
+                                <td><b>Simulation height</b></td>
+                                <td>
+                                    <input type="range" min="5000" max="15000" value="12000" step="100" id="simHeightSel" />
+                                    <output id="simHeightShow"></output>
+                                </td>
+                                <td><i id="simHeightWarning" style="color:rgb(255, 61, 61); display: none;">Sim heights other than 12000 m are not optimized and may be buggy!</i></td>
+                            </tr>
+                        </table>
+
+                        <div class="status-strip">
+                            <div class="status-pill"><strong>Best fidelity</strong><span>300 vertical layers remains the most tuned configuration.</span></div>
+                            <div class="status-pill"><strong>Storm scale</strong><span>Higher horizontal resolution generally permits stronger organization.</span></div>
+                            <div class="status-pill"><strong>Lightning detail</strong><span>Deep, colder storms benefit most from the upgraded lightning renderer.</span></div>
+                        </div>
+
+                        <div class="primary-cta">
+                            <input type="button" value="Launch New Simulation" onclick="loadData ()" />
+                            <span class="primary-note">Move the mouse until you see terrain you like, then click to begin the run.</span>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="glass-card preview-panel">
+                    <div>
+                        <h3 class="card-title">Atmospheric sounding preview</h3>
+                        <p class="card-subtitle">Inspect the selected profile before launch so you can judge instability, moisture, and storm potential.</p>
+                    </div>
+                    <div class="preview-overview">
+                        <div class="preview-pill"><strong>Observed input</strong><span>Pulls from the selected station, date, and cycle.</span></div>
+                        <div class="preview-pill"><strong>Rapid setup</strong><span>Swap presets without leaving the launch deck.</span></div>
+                        <div class="preview-pill"><strong>Storm-ready</strong><span>Use this preview to decide whether you want a quiet or explosive start.</span></div>
+                    </div>
+                    <div class="preview-frame">
+                        <img id="soundingPreview" alt="Sounding not available, Please select a different time.">
+                    </div>
+                </section>
             </div>
         </section>
 
-        <div class="intro-grid">
-            <section class="glass-card setup-stack">
-                <h3 class="card-title">Start a new simulation</h3>
-                <p class="card-subtitle">Choose a preset, optionally inject a real sounding profile, then tune the simulation domain before launching.</p>
-
-                <div class="setup-stack">
-                    <div>
-                        <label class="field-label" for="presetSelect">Preset</label>
-                        <select id="presetSelect"></select>
-                    </div>
-                    <div class="control-row">
-                        <div>
-                            <label class="field-label" for="stationSelect">Sounding station</label>
-                            <select id="stationSelect"></select>
-                        </div>
-                        <div>
-                            <label class="field-label" for="datePicker">Date</label>
-                            <input type="date" id="datePicker" value="2025-06-15" min="2010-01-01" onchange="prepareSounding();" />
-                        </div>
-                        <div>
-                            <label class="field-label" for="hourSelector">Cycle</label>
-                            <select id="hourSelector" onchange="prepareSounding();">
-                                <option value="0">00H</option>
-                                <option value="6">06H</option>
-                                <option value="12" selected>12H</option>
-                                <option value="18">18H</option>
-                            </select>
-                        </div>
-                    </div>
-                    <p class="card-subtitle">Select a real-world sounding profile to drive large-scale forcing in the simulation.</p>
-                </div>
-
-                <form id="startBtn" oninput="updateSetupSliders();" class="setup-stack">
-                    <div class="resolution-warning">
-                        <p>Choose a resolution. Higher settings unlock finer storm detail, but they also raise GPU cost significantly.</p>
-                    </div>
-
-                    <table class="slider-table">
-                        <tr>
-                            <td><b>Horizontal resolution</b></td>
-                            <td style="width: 30%">
-                                <input type="range" min="100" max="16000" value="3000" step="100" id="simResSelX" />
-                                <output id="simResShowX"></output>
-                            </td>
-                            <td id="simWorldProperties" style="color:rgb(255, 255, 255); width: 50%">Cellheight: 40m Sim width: 40 km</td>
-                        </tr>
-                        <tr>
-                            <td><b>Vertical resolution</b></td>
-                            <td>
-                                <input type="range" min="100" max="500" value="300" step="10" id="simResSelY" />
-                                <output id="simResShowY"></output>
-                            </td>
-                            <td><i id="simResYWarning" style="color:rgb(255, 61, 61); display: none;">Vertical resolutions other than 300 are not optimized and may be buggy!</i></td>
-                        </tr>
-                        <tr>
-                            <td><b>Simulation height</b></td>
-                            <td>
-                                <input type="range" min="5000" max="15000" value="12000" step="100" id="simHeightSel" />
-                                <output id="simHeightShow"></output>
-                            </td>
-                            <td><i id="simHeightWarning" style="color:rgb(255, 61, 61); display: none;">Sim heights other than 12000 m are not optimized and may be buggy!</i></td>
-                        </tr>
-                    </table>
-                    <div class="primary-cta">
-                        <input type="button" value="Create New Simulation" onclick="loadData ()" />
-                        <span class="primary-note">Move the mouse until you see terrain you like, then click to begin.</span>
-                    </div>
-                </form>
-            </section>
-
-            <section class="glass-card preview-card">
-                <h3 class="card-title">Sounding preview</h3>
-                <p class="card-subtitle">Preview the selected atmospheric profile before starting the sandbox.</p>
-                <div class="preview-frame">
-                    <img id="soundingPreview" alt="Sounding not available, Please select a different time.">
-                </div>
-            </section>
-        </div>
-
-        <div class="info-grid">
+        <div class="load-grid">
             <section class="glass-card">
-                <h3 class="card-title">Load a saved world</h3>
-                <p class="card-subtitle">Resume previous experiments or inspect curated scenarios.</p>
+                <h3 class="card-title">Resume a saved world</h3>
+                <p class="card-subtitle">Load a `.weathersandbox` file to continue an experiment, inspect a setup, or branch a scenario into a new test.</p>
                 <p>
                     <label for="fileInput">Load Save File:</label>
                     <input type="file" id="fileInput" name="fileInput" accept=".weathersandbox " onchange="loadData()" />
@@ -788,7 +942,7 @@
             </section>
 
             <div class="glass-card example-files">
-                <h3>Example Save Files</h3>
+                <h3 class="card-title">Example save files</h3>
                 <p><a href="./saves/Background image.weathersandbox">Background image</a></p>
                 <p><a href="./saves/Hotlake Valley.weathersandbox">Hotlake Valley</a></p>
                 <p><a href="./saves/Mountain uplift cell.weathersandbox">Mountain Uplift Cell at sunset</a></p>
@@ -808,18 +962,18 @@
 
         <div class="help-grid">
             <div id="help" class="tips glass-card">
-                <h2>Tips</h2>
+                <h2>Operational tips</h2>
                 <ul>
-                    <li>Vertical resolution of 300 gives the most realistic results.</li>
-                    <li>Larger horizontal resolutions allow stronger converging winds to develop, forming longer-lasting cells.</li>
+                    <li>Vertical resolution of 300 still gives the most realistic results for the current model tuning.</li>
+                    <li>Larger horizontal resolutions allow stronger converging winds and longer-lived organized convection.</li>
                     <li>Performance is mostly GPU dependent; a GTX 1070-class GPU or better is recommended for real-time play.</li>
                     <li>If you have a laptop with a dedicated GPU, make sure the browser is actually using it.</li>
-                    <li>Play in fullscreen mode (F11) for the best cockpit and storm-viewing experience.</li>
+                    <li>Fullscreen mode (F11) gives the best cockpit and storm-viewing experience.</li>
                 </ul>
             </div>
 
             <div class="controls glass-card">
-                <h2>Controls</h2>
+                <h2>Simulation controls</h2>
                 <h3>Mouse</h3>
                 <ul>
                     <li>Middle mouse button drags the simulation area.</li>
@@ -875,6 +1029,43 @@
         </div>
     </div></div>
 
+    <canvas id="graphCanvas"></canvas>
+
+    <canvas id="dropletInfoCanvas" width="90" height="50"
+        style="z-index: 1; position: absolute; left: 50%; top: 50%;"></canvas>
+    <canvas id="mainCanvas">
+        Your browser does not support HTML5, you must be using a really old browser!
+    </canvas>
+    <div id="simHud" class="sim-hud hidden">
+        <div class="sim-hud-card">
+            <div class="sim-hud-header">
+                <h3 class="sim-hud-title">Simulation command deck</h3>
+                <span id="simHudClock" class="sim-badge">Preparing…</span>
+            </div>
+            <div class="sim-hud-grid">
+                <div class="sim-hud-metric"><span class="sim-hud-label">Display mode</span><span id="simHudDisplay" class="sim-hud-value">—</span></div>
+                <div class="sim-hud-metric"><span class="sim-hud-label">Active tool</span><span id="simHudTool" class="sim-hud-value">—</span></div>
+                <div class="sim-hud-metric"><span class="sim-hud-label">Brush</span><span id="simHudBrush" class="sim-hud-value">—</span></div>
+                <div class="sim-hud-metric"><span class="sim-hud-label">Simulation rate</span><span id="simHudSpeed" class="sim-hud-value">—</span></div>
+                <div class="sim-hud-metric"><span class="sim-hud-label">Wind vectors</span><span id="simHudVectors" class="sim-hud-value">—</span></div>
+                <div class="sim-hud-metric"><span class="sim-hud-label">Lightning profile</span><span id="simHudLightning" class="sim-hud-value">—</span></div>
+            </div>
+            <div class="sim-badges">
+                <span id="simHudPause" class="sim-badge">Running</span>
+                <span id="simHudWrap" class="sim-badge">Wrap on</span>
+                <span id="simHudDrops" class="sim-badge">Drops visible</span>
+                <span id="simHudStations" class="sim-badge">Stations on</span>
+            </div>
+            <div class="sim-hud-hints">
+                <span><strong>H</strong> toggle full controls</span>
+                <span><strong>Tab</strong> vectors on/off</span>
+                <span><strong>N</strong> weather stations</span>
+                <span><strong>Space</strong> pause / resume</span>
+                <span><strong>B + wheel</strong> brush size</span>
+                <span><strong>1–9</strong> change display</span>
+            </div>
+        </div>
+    </div>
     <canvas id="graphCanvas"></canvas>
 
     <canvas id="dropletInfoCanvas" width="90" height="50"

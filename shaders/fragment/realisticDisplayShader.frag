@@ -51,6 +51,8 @@ uniform float displayVectorField;
 
 uniform float iterNum;
 uniform float lightningTextureReady;
+uniform float lightningTemperature;
+uniform float lightningBranchStrength;
 
 out vec4 fragmentColor;
 
@@ -120,28 +122,35 @@ float calcLightningTime(float startIterNum)
 
 float proceduralLightningTrunk(vec2 lightningTexCoord, vec2 lightningPos)
 {
-  float sway = sin(lightningTexCoord.y * 34.0 + lightningPos.x * 120.0) * 0.035;
+  float thermalWobble = map_rangeC(lightningTemperature, 12000., 40000., 0.75, 1.35);
+  float sway = sin(lightningTexCoord.y * 34.0 + lightningPos.x * 120.0) * (0.030 * thermalWobble);
   sway += sin(lightningTexCoord.y * 87.0 + lightningPos.y * 200.0) * 0.012;
+  sway += sin(lightningTexCoord.y * 148.0 + iterNum * 0.16) * 0.006 * lightningBranchStrength;
 
-  float trunkWidth = mix(0.022, 0.004, lightningTexCoord.y);
-  return smoothstep(trunkWidth, trunkWidth * 0.18, abs((lightningTexCoord.x - 0.5) - sway));
+  float trunkWidth = mix(0.025, 0.0045, lightningTexCoord.y);
+  return smoothstep(trunkWidth, trunkWidth * 0.16, abs((lightningTexCoord.x - 0.5) - sway));
 }
 
 float proceduralLightningBranches(vec2 lightningTexCoord, vec2 lightningPos)
 {
-  float gateA = smoothstep(0.14, 0.72, lightningTexCoord.y) * (1.0 - smoothstep(0.62, 0.95, lightningTexCoord.y));
-  float gateB = smoothstep(0.20, 0.86, lightningTexCoord.y) * (1.0 - smoothstep(0.74, 0.98, lightningTexCoord.y));
+  float branchEnergy = map_rangeC(lightningTemperature, 12000., 40000., 0.8, 1.45) * lightningBranchStrength;
+  float gateA = smoothstep(0.10, 0.74, lightningTexCoord.y) * (1.0 - smoothstep(0.60, 0.96, lightningTexCoord.y));
+  float gateB = smoothstep(0.16, 0.90, lightningTexCoord.y) * (1.0 - smoothstep(0.72, 0.99, lightningTexCoord.y));
+  float gateC = smoothstep(0.24, 0.88, lightningTexCoord.y) * (1.0 - smoothstep(0.78, 0.995, lightningTexCoord.y));
 
-  float branchA = sin(lightningTexCoord.y * 56.0 + lightningPos.x * 310.0) * 0.060;
-  float branchB = sin(lightningTexCoord.y * 43.0 + lightningPos.y * 270.0 + 1.7) * -0.048;
+  float branchA = sin(lightningTexCoord.y * 56.0 + lightningPos.x * 310.0 + iterNum * 0.08) * (0.055 * branchEnergy);
+  float branchB = sin(lightningTexCoord.y * 43.0 + lightningPos.y * 270.0 + 1.7 + iterNum * 0.05) * (-0.048 * branchEnergy);
+  float branchC = sin(lightningTexCoord.y * 71.0 + lightningPos.x * 190.0 + lightningPos.y * 70.0) * (0.030 * branchEnergy);
 
-  float widthA = mix(0.014, 0.0025, lightningTexCoord.y);
-  float widthB = mix(0.012, 0.0020, lightningTexCoord.y);
+  float widthA = mix(0.015, 0.0028, lightningTexCoord.y);
+  float widthB = mix(0.013, 0.0022, lightningTexCoord.y);
+  float widthC = mix(0.010, 0.0018, lightningTexCoord.y);
 
-  float maskA = smoothstep(widthA, widthA * 0.18, abs((lightningTexCoord.x - 0.5) - branchA)) * gateA;
-  float maskB = smoothstep(widthB, widthB * 0.16, abs((lightningTexCoord.x - 0.5) - branchB)) * gateB;
+  float maskA = smoothstep(widthA, widthA * 0.16, abs((lightningTexCoord.x - 0.5) - branchA)) * gateA;
+  float maskB = smoothstep(widthB, widthB * 0.15, abs((lightningTexCoord.x - 0.5) - branchB)) * gateB;
+  float maskC = smoothstep(widthC, widthC * 0.14, abs((lightningTexCoord.x - 0.5) - branchC)) * gateC;
 
-  return max(maskA, maskB) * 0.9;
+  return max(max(maskA, maskB), maskC) * 0.95;
 }
 
 float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
@@ -179,13 +188,14 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
   float texMask = smoothstep(0.12, 0.32, lightningTexel.a);
   float boltCore = max(max(lightningTexel.r, lightningTexel.g), lightningTexel.b);
-  float glow = lightningTexel.a * 0.35;
+  float glow = lightningTexel.a * 0.40;
   float trunkMask = proceduralLightningTrunk(lightningTexCoord, pos);
   float branchMask = proceduralLightningBranches(lightningTexCoord, pos);
-  float pixVal = max(mix(boltCore, glow, 0.15) * texMask * lightningTextureReady, trunkMask * 0.85);
-  pixVal += branchMask * 0.32;
+  float dynamicPulse = 0.88 + sin(iterNum * 0.18 + pos.x * 35.0 + pos.y * 21.0) * 0.12;
+  float pixVal = max(mix(boltCore, glow, 0.18) * texMask * lightningTextureReady, trunkMask * (0.88 * dynamicPulse));
+  pixVal += branchMask * (0.30 + lightningBranchStrength * 0.10);
 
-  const float branchShowFactor = 2.1;      // 1.5
+  const float branchShowFactor = 2.35;      // 1.5
   const float leaderBrightness = 18000.;   // 200.0
   const float mainBoltBrightness = 85000.; // 100000.
 
@@ -207,7 +217,9 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   pixVal *= currentLightningIntensity;
 
-  const vec3 lightningCol = vec3(0.82, 0.86, 1.0); // cold white-blue lightning
+  float thermalTint = map_rangeC(lightningTemperature, 12000., 40000., 0.0, 1.0);
+  vec3 lightningCol = mix(vec3(1.0, 0.88, 0.72), vec3(0.78, 0.88, 1.0), thermalTint);
+  lightningCol = mix(lightningCol, vec3(0.92, 0.96, 1.0), branchMask * 0.35);
 
   vec3 outputColor = max(pixVal * lightningCol, vec3(0));
 

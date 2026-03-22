@@ -334,6 +334,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var simHudEl;
+var introAmbientTimer = null;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -365,9 +366,10 @@ const displayModeLabels = {
 
 const loadingTips = [
   'Tip: higher horizontal resolution encourages broader converging flow and larger storm structures.',
-  'Tip: press H in-sim to toggle the full control surface and rely on the compact HUD for quick reads.',
+  'Tip: press H in-sim to toggle the full control surface and rely on the compact command deck for quick reads.',
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
-  'Tip: real-world soundings can quickly seed unstable environments for severe-weather experiments.'
+  'Tip: colder cloud tops now push lightning toward hotter, brighter discharges.',
+  'Tip: use real-world soundings to seed environments, then fine-tune lightning temperature and branch energy in-sim.'
 ];
 
 const toolLabels = {
@@ -413,9 +415,25 @@ function setWeatherStationsVisibility(visible)
 
   if (!visible && guiControls?.tool == 'TOOL_STATION')
     guiControls.tool = 'TOOL_NONE';
+
+  updateSimulationHud();
 }
 
-function setWindVectorVisibility(visible) { displayVectorField = visible; }
+function setWindVectorVisibility(visible)
+{
+  displayVectorField = visible ? 1.0 : 0.0;
+  updateSimulationHud();
+}
+
+function getLightningProfileLabel()
+{
+  if (!guiControls)
+    return '—';
+
+  const temp = Math.round(guiControls.lightningTemperature / 100.0) * 100;
+  const branch = guiControls.lightningBranchStrength.toFixed(2);
+  return temp.toLocaleString() + ' K • branch ×' + branch;
+}
 
 function updateSimulationHud()
 {
@@ -440,6 +458,9 @@ function updateSimulationHud()
   setText('simHudPause', guiControls.paused ? 'Paused' : 'Running');
   setText('simHudWrap', guiControls.wrapHorizontally ? 'Wrap on' : 'Wrap off');
   setText('simHudDrops', guiControls.showDrops ? 'Drops visible' : 'Drops hidden');
+  setText('simHudVectors', guiControls.showWindVectors ? 'Vectors on' : 'Vectors off');
+  setText('simHudStations', guiControls.showWeatherStations ? 'Stations on' : 'Stations off');
+  setText('simHudLightning', getLightningProfileLabel());
   setText('simHudClock', clockEl ? clockEl.textContent : 'Simulation');
 }
 
@@ -495,6 +516,8 @@ const guiControls_default = {
   showWindVectors : false,
   showStatusHud : true,
   showWeatherStations : true,
+  lightningTemperature : 26000.0,
+  lightningBranchStrength : 1.0,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
   enablePrecipitation : true,
   showDrops : false,
@@ -1482,33 +1505,55 @@ function loadImage(url)
 class LoadingBar
 {
   #loadingBar;
-  #bar;
-  #underBar;
-  #percent;
-  #description;
 
   constructor(percentIn)
   {
-    if (percentIn == null)
-      this.percent = 0;
-    else
-      this.percent = percentIn;
+    this.percent = percentIn == null ? 0 : percentIn;
+    this.description = 'Booting weather systems';
 
-    // create html
     this.loadingBar = document.createElement('div');
     this.loadingBar.className = 'loading-overlay';
 
-    const card = document.createElement('div');
-    card.className = 'loading-card';
-    this.loadingBar.appendChild(card);
+    const shell = document.createElement('div');
+    shell.className = 'loading-shell';
+    this.loadingBar.appendChild(shell);
+
+    const masthead = document.createElement('div');
+    masthead.className = 'loading-masthead';
+    shell.appendChild(masthead);
+
+    const eyebrow = document.createElement('span');
+    eyebrow.className = 'loading-eyebrow';
+    eyebrow.textContent = 'Launching atmospheric sandbox';
+    masthead.appendChild(eyebrow);
 
     const title = document.createElement('h2');
-    title.textContent = 'Preparing simulation';
-    card.appendChild(title);
+    title.textContent = 'Assembling terrain, profiles, lightning, and control systems.';
+    masthead.appendChild(title);
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = 'Compiling shaders, creating textures, and wiring the atmosphere together.';
-    card.appendChild(subtitle);
+    subtitle.textContent = 'The new launch deck tracks startup stages while the renderer compiles shaders, uploads sounding textures, and bakes dynamic lightning assets.';
+    masthead.appendChild(subtitle);
+
+    const content = document.createElement('div');
+    content.className = 'loading-content';
+    shell.appendChild(content);
+
+    const card = document.createElement('div');
+    card.className = 'loading-card';
+    content.appendChild(card);
+
+    const progressHeader = document.createElement('div');
+    progressHeader.className = 'loading-progress-header';
+    card.appendChild(progressHeader);
+
+    this.percentLabel = document.createElement('strong');
+    this.percentLabel.className = 'loading-percent';
+    progressHeader.appendChild(this.percentLabel);
+
+    this.stageLabel = document.createElement('span');
+    this.stageLabel.className = 'loading-stage';
+    progressHeader.appendChild(this.stageLabel);
 
     const track = document.createElement('div');
     track.className = 'loading-progress-track';
@@ -1518,22 +1563,38 @@ class LoadingBar
     this.bar.className = 'loading-progress-bar';
     track.appendChild(this.bar);
 
-    const meta = document.createElement('div');
-    meta.className = 'loading-meta';
-    card.appendChild(meta);
-
-    this.percentLabel = document.createElement('span');
-    meta.appendChild(this.percentLabel);
-
-    this.underBar = document.createElement('span');
-    meta.appendChild(this.underBar);
+    this.metaGrid = document.createElement('div');
+    this.metaGrid.className = 'loading-meta-grid';
+    card.appendChild(this.metaGrid);
 
     this.tipEl = document.createElement('p');
     this.tipEl.className = 'loading-tip';
     card.appendChild(this.tipEl);
 
-    this.#update();
+    const sidePanel = document.createElement('div');
+    sidePanel.className = 'loading-side-panel';
+    content.appendChild(sidePanel);
 
+    sidePanel.innerHTML = `
+      <div class="loading-side-card">
+        <span class="loading-side-label">Startup focus</span>
+        <strong id="loadingFocusLabel">Renderer + weather model</strong>
+        <p id="loadingFocusCopy">Preparing the upgraded intro deck, loading overlay, HUD, and lightning renderer.</p>
+      </div>
+      <div class="loading-side-card">
+        <span class="loading-side-label">Pipeline checks</span>
+        <ul class="loading-checklist">
+          <li>Shader compilation</li>
+          <li>Profile texture upload</li>
+          <li>Lightning atlas generation</li>
+          <li>HUD + control deck wiring</li>
+        </ul>
+      </div>`;
+
+    this.focusLabel = sidePanel.querySelector('#loadingFocusLabel');
+    this.focusCopy = sidePanel.querySelector('#loadingFocusCopy');
+
+    this.#update();
     document.body.appendChild(this.loadingBar);
   }
 
@@ -1555,26 +1616,45 @@ class LoadingBar
   {
     this.bar.style.background = 'linear-gradient(90deg, #ff5b73, #ff9a62)';
     this.description = error;
-    await this.#update();
+    await this.#update(true);
   }
 
-  #update()
+  #update(isError = false)
   {
     return new Promise((resolve) => {
-      this.bar.style.width = this.percent + '%';
-      this.percentLabel.textContent = this.percent + ' %';
-      this.underBar.textContent = this.description || 'Starting…';
-      this.tipEl.textContent = loadingTips[Math.floor(this.percent / 25) % loadingTips.length];
-      let timeout;
-      if (this.percent == 100)
-        timeout = 5;
-      else
-        timeout = 5; // 50 for nicer feel
-      setTimeout(() => { resolve(); }, timeout);
+      const safePercent = Math.max(0, Math.min(this.percent, 100));
+      const description = this.description || 'Booting weather systems';
+      const stage = safePercent < 20 ? 'Boot sequence' : safePercent < 45 ? 'Compiling renderer' : safePercent < 70 ? 'Uploading simulation data' : safePercent < 95 ? 'Finalizing control deck' : 'Launch ready';
+
+      this.bar.style.width = safePercent + '%';
+      this.percentLabel.textContent = safePercent + '%';
+      this.stageLabel.textContent = stage;
+      this.tipEl.textContent = loadingTips[Math.floor(safePercent / 20) % loadingTips.length];
+      this.focusLabel.textContent = description;
+      this.focusCopy.textContent = isError ? 'Startup stopped due to an error. Review the message and retry once the missing asset or server issue is resolved.' : 'Current stage: ' + description + '. The launch deck keeps the most important startup state visible while the app prepares simulation resources.';
+
+      this.metaGrid.innerHTML = '';
+      [
+        ['Shaders', safePercent < 35 ? 'Compiling' : 'Ready'],
+        ['Textures', safePercent < 65 ? 'Uploading' : 'Ready'],
+        ['Lightning', safePercent < 85 ? 'Synthesizing' : 'Primed'],
+        ['Controls', safePercent < 95 ? 'Linking' : 'Ready']
+      ].forEach(([label, value]) => {
+        const item = document.createElement('div');
+        item.className = 'loading-meta-item';
+        item.innerHTML = '<span>' + label + '</span><strong>' + value + '</strong>';
+        this.metaGrid.appendChild(item);
+      });
+
+      setTimeout(resolve, 5);
     });
   }
 
-  remove() { this.loadingBar.parentNode.removeChild(this.loadingBar); }
+  remove()
+  {
+    if (this.loadingBar?.parentNode)
+      this.loadingBar.parentNode.removeChild(this.loadingBar);
+  }
 }
 
 
@@ -1582,8 +1662,14 @@ function setLoadingBar()
 {
   return new Promise((resolve) => {
     var element = document.getElementById('IntroScreen');
-    element.parentNode.removeChild(element); // remove introscreen div
+    if (introAmbientTimer != null) {
+      clearInterval(introAmbientTimer);
+      introAmbientTimer = null;
+    }
+    if (element?.parentNode)
+      element.parentNode.removeChild(element); // remove introscreen div
 
+    document.body.classList.add('sim-loading-active');
     document.body.style.backgroundColor = 'black';
 
     loadingBar = new LoadingBar(1);
@@ -3931,6 +4017,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     precipitation_folder.add(guiControls, 'inactiveDroplets', 0, NUM_DROPLETS).listen().name('Inactive Droplets');
 
+    precipitation_folder.add(guiControls, 'lightningTemperature', 12000.0, 40000.0, 500.0).name('Lightning Temperature (K)').onChange(updateSimulationHud);
+    precipitation_folder.add(guiControls, 'lightningBranchStrength', 0.5, 2.0, 0.05).name('Lightning Branch Strength').onChange(updateSimulationHud);
 
     var display_folder = datGui.addFolder('Display');
 
@@ -3980,10 +4068,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'SmoothCam').onChange(function() { cam.smooth = guiControls.SmoothCam; }).name('Smooth Camera');
 
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
-    display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); }).name('Show Wind Vectors').listen();
+    display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showStatusHud').onChange(function() { setSimHudVisibility(guiControls.showStatusHud); }).name('Show Status HUD').listen();
-    display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); }).name('Show Weather Stations').listen();
-    display_folder.add(guiControls, 'showDrops').name('Show Droplets').listen();
+    display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
+    display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -5632,7 +5720,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       generateLightningTexture(i, imgElement.data);
     };
 
-    lightningGeneratorWorker.postMessage({width : 2500, height : 5000}); // 10000 5000
+    lightningGeneratorWorker.postMessage({width : 2500, height : 5000, branchStrength : guiControls.lightningBranchStrength}); // 10000 5000
   }
 
   await loadingBar.set(90, 'Setting up FBO`s');
@@ -5838,6 +5926,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'lightningDataTex'), 8);
   gl.uniform1i(gl.getUniformLocation(realisticDisplayProgram, 'ambientLightTex'), 9);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), 0.0);
+  gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTemperature'), guiControls.lightningTemperature);
+  gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningBranchStrength'), guiControls.lightningBranchStrength);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'dryLapse'), dryLapse);
   gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'cellHeight'), cellHeight);
 
@@ -6227,8 +6317,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
 
               if (Math.round(lightningDataValues[2]) == iterNum) {
-                const lightningIntensity = Math.pow(lightningDataValues[3], 2.0);
-                cam.triggerShake(lightningDataValues[3]);
+                const lightningThermalBoost = Math.max(guiControls.lightningTemperature / 26000.0, 0.65);
+                const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;
+                cam.triggerShake(lightningDataValues[3] * guiControls.lightningBranchStrength);
                 if (guiControls.sound) {
                   soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], lightningIntensity);
                 }
@@ -6437,6 +6528,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'Xmult'), horizontalDisplayMult);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'iterNum'), iterNum);
       gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTextureReady'), loadedLightningTextures > 0 ? 1.0 : 0.0);
+      gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningTemperature'), guiControls.lightningTemperature);
+      gl.uniform1f(gl.getUniformLocation(realisticDisplayProgram, 'lightningBranchStrength'), guiControls.lightningBranchStrength);
 
       // Don't display vectors when zoomed out because you would just see noise
       if (cam.curZoom / sim_res_x > 0.003) {
@@ -6598,6 +6691,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         gl.uniform3f(gl.getUniformLocation(airQualityDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(airQualityDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(airQualityDisplayProgram, 'Xmult'), horizontalDisplayMult);
+        gl.uniform1f(gl.getUniformLocation(airQualityDisplayProgram, 'displayVectorField'), cam.curZoom / sim_res_x > 0.003 ? displayVectorField : 0.0);
 
       } else if (guiControls.displayMode == 'DISP_HUMD') {
         gl.useProgram(humidityDisplayProgram);
@@ -6605,6 +6699,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         gl.uniform3f(gl.getUniformLocation(humidityDisplayProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
         gl.uniform4f(gl.getUniformLocation(humidityDisplayProgram, 'cursor'), mouseXinSim, mouseYinSim, guiControls.brushSize * 0.5, cursorType);
         gl.uniform1f(gl.getUniformLocation(humidityDisplayProgram, 'Xmult'), horizontalDisplayMult);
+        gl.uniform1f(gl.getUniformLocation(humidityDisplayProgram, 'displayVectorField'), cam.curZoom / sim_res_x > 0.003 ? displayVectorField : 0.0);
 
       } else if (guiControls.displayMode == 'DISP_IRDOWNTEMP') {
         gl.useProgram(IRtempDisplayProgram);
