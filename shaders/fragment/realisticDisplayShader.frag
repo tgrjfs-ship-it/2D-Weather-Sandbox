@@ -197,8 +197,13 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float coreCurve = sin(boltCoord.y * 18.0 + pos.x * 120.0) * 0.07;
-  coreCurve += sin(boltCoord.y * 31.0 + pos.y * 90.0 + 1.8) * 0.03;
+  float curveSeedA = random2d(pos * 91.7 + vec2(strikeIntensity, 0.0));
+  float curveSeedB = random2d(pos.yx * 63.1 + vec2(0.0, strikeIntensity));
+  float curveSeedC = random2d(pos * 127.4 + vec2(1.7, 2.3));
+
+  float coreCurve = sin(boltCoord.y * mix(11.0, 23.0, curveSeedA) + curveSeedB * PI * 2.0) * mix(0.035, 0.085, densityFactor);
+  coreCurve += sin(boltCoord.y * mix(21.0, 39.0, curveSeedB) + curveSeedC * PI * 2.0) * mix(0.018, 0.050, densityFactor);
+  coreCurve += sin(boltCoord.y * mix(37.0, 61.0, curveSeedC) + curveSeedA * PI * 2.0) * 0.014;
   boltCoord.x += coreCurve;
 
   vec4 texLightning = texture(lightningTex, boltCoord);

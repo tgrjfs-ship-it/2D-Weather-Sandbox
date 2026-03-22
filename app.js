@@ -398,6 +398,7 @@ var simulationHudHideTimer = null;
 function setSimulationHudVisibility(visible)
 {
   const hud = ensureSimulationHud();
+  hud.shell.hidden = !visible;
   hud.shell.classList.toggle('is-hidden', !visible);
   if (!visible)
     hud.shell.classList.remove('visible');
