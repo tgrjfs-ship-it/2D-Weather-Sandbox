@@ -53,6 +53,9 @@ layout(location = 2) out ivec4 wall;
 #define minimalFireVegetation 20
 
 #define minimalFireIntensity 0.002
+#define fireExtinguishRainThreshold 0.08
+#define fireExtinguishSnowThreshold 0.12
+#define hailDamageThreshold 0.18
 
 #define wallVerticalInfluence 1 // 2 How many cells above the wall surface effects like heating and evaporation are applied
 
@@ -422,20 +425,34 @@ void main()
       case WALLTYPE_URBAN:
         wall[VEGETATION] = min(wall[VEGETATION], 75); // limit vegetation in urban areas
       case WALLTYPE_FIRE:
-        if (wall[TYPE] == WALLTYPE_FIRE) {            // extra check to make sure it's not urban
+        if (wall[TYPE] == WALLTYPE_FIRE) { // extra check to make sure it's not urban
           float fireIntensity = calcFireIntensity(wall[VEGETATION], water[SOIL_MOISTURE], waterX0Yp[PRECIPITATION]);
+          bool precipPutOutFire = precipDeposition[RAIN_DEPOSITION] >= fireExtinguishRainThreshold || precipDeposition[SNOW_DEPOSITION] >= fireExtinguishSnowThreshold;
 
-          if (fireIntensity < minimalFireIntensity) { // fire goes out
-            wall[TYPE] = WALLTYPE_LAND;               // turn off fire
+          if (precipPutOutFire || fireIntensity < minimalFireIntensity) {
+            wall[TYPE] = WALLTYPE_LAND; // turn off fire
           } else if (int(iterNum) % (int(10. / fireIntensity) + 1) == 0) {
-            wall[VEGETATION] -= 1;                    // reduce vegetation
+            wall[VEGETATION] -= 1;      // reduce vegetation
             if (wall[VEGETATION] < 10)
-              wall[TYPE] = WALLTYPE_LAND;             // turn off fire
+              wall[TYPE] = WALLTYPE_LAND;
           }
         }
-      case WALLTYPE_LAND:                                                                                          // no break,can also be fire or urban:
+      case WALLTYPE_LAND: // no break, can also be fire or urban:
         water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + precipDeposition[RAIN_DEPOSITION] * 0.1, 0.0, 1000.0); // rain accumulation
         water[SNOW] = clamp(water[SNOW] + precipDeposition[SNOW_DEPOSITION] * snowMassToHeight, 0.0, 4000.0);      // snow accumulation in cm
+
+        bool hailImpact = precipDeposition[SNOW_DEPOSITION] >= hailDamageThreshold;
+        if (hailImpact) {
+          if (wall[TYPE] == WALLTYPE_URBAN) {
+            wall[TYPE] = WALLTYPE_LAND;
+            wall[VEGETATION] = max(wall[VEGETATION] - 20, 0);
+          } else if (wall[TYPE] == WALLTYPE_INDUSTRIAL) {
+            wall[TYPE] = WALLTYPE_LAND;
+            wall[VEGETATION] = max(wall[VEGETATION] - 10, 0);
+          } else {
+            wall[VEGETATION] = max(wall[VEGETATION] - 12, 0);
+          }
+        }
 
 
         vec4 baseAboveSurface = texture(baseTex, texCoordX0Yp);
