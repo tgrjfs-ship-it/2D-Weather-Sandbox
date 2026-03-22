@@ -382,6 +382,7 @@ void main()
           }
         }
         break;
+      }
       case WALLTYPE_WATER:
         if (wall[VERT_DISTANCE] <= wallVerticalInfluence) {
           float localWaterTemperature = texture(baseTex, texCoordX0Ym)[TEMPERATURE];
@@ -437,11 +438,15 @@ void main()
               wall[TYPE] = WALLTYPE_LAND;
           }
         }
-      case WALLTYPE_LAND: // no break, can also be fire or urban:
+      case WALLTYPE_LAND: { // no break, can also be fire or urban:
+        bool hailImpact = precipDeposition[SNOW_DEPOSITION] >= hailDamageThreshold;
+        vec4 baseAboveSurface = texture(baseTex, texCoordX0Yp);
+        vec4 waterAboveSurface = texture(waterTex, texCoordX0Yp);
+        float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
+
         water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + precipDeposition[RAIN_DEPOSITION] * 0.1, 0.0, 1000.0); // rain accumulation
         water[SNOW] = clamp(water[SNOW] + precipDeposition[SNOW_DEPOSITION] * snowMassToHeight, 0.0, 4000.0);      // snow accumulation in cm
 
-        bool hailImpact = precipDeposition[SNOW_DEPOSITION] >= hailDamageThreshold;
         if (hailImpact) {
           if (wall[TYPE] == WALLTYPE_URBAN) {
             wall[TYPE] = WALLTYPE_LAND;
@@ -453,12 +458,6 @@ void main()
             wall[VEGETATION] = max(wall[VEGETATION] - 12, 0);
           }
         }
-
-
-        vec4 baseAboveSurface = texture(baseTex, texCoordX0Yp);
-        vec4 waterAboveSurface = texture(waterTex, texCoordX0Yp);
-
-        float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
 
         float surfaceLandEvap = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]);
         float evaporation = surfaceLandEvap * 0.10;
@@ -512,6 +511,7 @@ void main()
           //}
         }
         break;
+      }
       case WALLTYPE_WATER:
 
         const float waterTempUpdateInterval = 20.0; // Update less often but with bigger value to reduce rounding error
