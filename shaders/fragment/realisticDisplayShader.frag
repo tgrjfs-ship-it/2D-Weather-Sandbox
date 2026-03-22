@@ -165,18 +165,47 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
   return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
 }
 
+float deriveStrikeTemperature(vec2 pos, float strikeIntensity)
+{
+  float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
+  float altitudeFactor = clamp(1.0 - pos.y, 0.0, 1.0);
+  float thermalNoise = random2d(pos * 17.23 + vec2(strikeIntensity, strikeIntensity * 1.7));
+  return mix(14500.0, 34000.0, clamp(densityFactor * 0.58 + altitudeFactor * 0.26 + thermalNoise * 0.16, 0.0, 1.0));
+}
+
+float deriveStrikeBranchStrength(vec2 pos, float strikeIntensity)
+{
+  float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
+  float altitudeFactor = clamp(1.0 - pos.y, 0.0, 1.0);
+  float branchNoise = random2d(pos.yx * 11.41 + vec2(strikeIntensity * 0.7, strikeIntensity));
+  return 1.02 + densityFactor * 0.68 + altitudeFactor * 0.18 + branchNoise * 0.24;
+}
+
 vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeIntensity)
 {
   vec2 cloudOffset = vec2(texCoord.x - pos.x, texCoord.y - pos.y * 0.78);
   cloudOffset.x *= aspectRatios[0];
 
-  float densityFactor = clamp(strikeIntensity / CG_LIGHTNING_INTENSITY_THRESHOLD, 0.0, 1.4);
-  float spread = mix(0.028, 0.080, min(densityFactor, 1.0));
-  float glow = exp(-dot(cloudOffset, cloudOffset) / max(spread * spread, 0.0001));
-  float filament = sin((cloudOffset.x + cloudOffset.y) * 180.0 + iterNum * 0.35) * 0.5 + 0.5;
-  float pulse = 0.85 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.15;
-  vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.88, 0.93, 1.0), min(densityFactor, 1.0));
-  return icColor * glow * filament * pulse * 2600.0 * max(1.2 - lightningTime * 0.18, 0.0);
+  float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float axis = cloudOffset.x * 0.92 + cloudOffset.y * 0.24;
+  float lateral = cloudOffset.y * 0.96 - cloudOffset.x * 0.18;
+
+  float envelope = exp(-pow(axis / mix(0.12, 0.20, densityFactor), 2.0) - pow(lateral / mix(0.050, 0.090, densityFactor), 2.0));
+  float widthA = mix(0.004, 0.010, densityFactor);
+  float widthB = mix(0.006, 0.013, densityFactor);
+  float widthC = mix(0.005, 0.011, densityFactor);
+
+  float channelA = exp(-pow((lateral - 0.018 - sin(axis * 48.0 + pos.x * 120.0) * 0.004) / widthA, 2.0));
+  float channelB = exp(-pow((lateral + sin(axis * 42.0 + pos.y * 110.0 + 1.4) * 0.003) / widthB, 2.0));
+  float channelC = exp(-pow((lateral + 0.018 + sin(axis * 53.0 + pos.x * 80.0 + 2.1) * 0.004) / widthC, 2.0));
+  float sheath = exp(-pow(lateral / mix(0.022, 0.032, densityFactor), 2.0)) * 0.45;
+
+  float parallelStructure = max(max(channelA, channelB), channelC) + sheath;
+  float pulse = 0.86 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.14;
+  float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
+  vec3 icColor = mix(vec3(1.0, 0.80, 0.66), vec3(0.86, 0.93, 1.0), thermalTint);
+  return icColor * envelope * parallelStructure * pulse * 2350.0 * max(1.22 - lightningTime * 0.18, 0.0);
 }
 
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
@@ -198,10 +227,8 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
     return vec3(0);
 
   float densityFactor = clamp((strikeIntensity - CG_LIGHTNING_INTENSITY_THRESHOLD) / (4.0 - CG_LIGHTNING_INTENSITY_THRESHOLD), 0.0, 1.0);
-  float strikeTempNoise = random2d(pos * 17.23 + vec2(strikeIntensity, strikeIntensity * 1.7));
-  float branchNoise = random2d(pos.yx * 11.41 + vec2(strikeIntensity * 0.7, strikeIntensity));
-  float strikeTemperature = mix(14000.0, 36000.0, clamp(densityFactor * 0.72 + strikeTempNoise * 0.28, 0.0, 1.0));
-  float branchStrength = 1.05 + densityFactor * 0.85 + branchNoise * 0.32;
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
   float texMask = smoothstep(0.08, 0.26, lightningTexel.a);

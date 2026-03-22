@@ -561,14 +561,19 @@ function updatePerformancePanel(activeMode)
 
 function deriveLightningProfile(x, y, intensity)
 {
-  const densityFactor = Math.max(0.0, Math.min((intensity - 0.75) / 3.25, 1.0));
+  const densityFactor = Math.max(0.0, Math.min((intensity - 0.3) / 3.7, 1.0));
+  const altitudeFactor = Math.max(0.0, Math.min(1.0 - y, 1.0));
   const rand = (value) => value - Math.floor(value);
-  const randomSeed = rand(Math.sin((x * 91.7 + y * 67.3 + intensity * 13.1) * 12.9898) * 43758.5453);
+  const thermalNoise = rand(Math.sin((x * 91.7 + y * 67.3 + intensity * 13.1) * 12.9898) * 43758.5453);
   const branchNoise = rand(Math.sin((x * 41.3 + y * 103.9 + intensity * 7.7) * 78.233) * 24634.6345);
+  const thermalBlend = Math.min(densityFactor * 0.58 + altitudeFactor * 0.26 + thermalNoise * 0.16, 1.0);
+  const temperature = 14500.0 + 19500.0 * thermalBlend;
   return {
     densityFactor,
-    temperature : 14000.0 + (22000.0 * Math.min(densityFactor * 0.72 + randomSeed * 0.28, 1.0)),
-    branchFactor : 0.95 + (densityFactor * 0.75) + branchNoise * 0.3,
+    altitudeFactor,
+    temperature,
+    branchFactor : 1.02 + densityFactor * 0.68 + altitudeFactor * 0.18 + branchNoise * 0.24,
+    shakeFactor : (0.55 + densityFactor * 0.55) * (0.72 + ((temperature - 14500.0) / 19500.0) * 0.78),
   };
 }
 
@@ -577,7 +582,8 @@ function getLightningProfileLabel()
   if (!currentLightningProfile)
     return 'Auto / storm density';
 
-  return Math.round(currentLightningProfile.temperature).toLocaleString() + ' K • auto';
+  const flashType = currentLightningProfile.densityFactor < 0.20 ? 'IC' : 'CG';
+  return Math.round(currentLightningProfile.temperature).toLocaleString() + ' K • ' + flashType;
 }
 
 function updateSimulationHud()
@@ -6475,9 +6481,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
                 latestLightningPos = {x : lightningDataValues[0], y : lightningDataValues[1]};
                 currentLightningProfile = deriveLightningProfile(lightningDataValues[0], lightningDataValues[1], lightningDataValues[3]);
-                const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 26000.0, 0.65);
+                const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
                 const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;
-                cam.triggerShake(lightningDataValues[3] * currentLightningProfile.branchFactor);
+                cam.triggerShake(lightningDataValues[3] * currentLightningProfile.shakeFactor);
                 updateSimulationHud();
                 if (guiControls.sound) {
                   soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], lightningIntensity);
