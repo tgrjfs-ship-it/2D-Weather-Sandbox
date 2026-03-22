@@ -8,7 +8,7 @@ precision highp isampler2D;
 
 #define lightHeatingConst 0.000002   // how much a unit of IR or sunlight (W/m2) changes the temperature per iteration
 
-#define standardSunBrightness 1250.; // W/m2
+#define standardSunBrightness 1250. // W/m2
 
 #define maxWaterTemp 40.0
 

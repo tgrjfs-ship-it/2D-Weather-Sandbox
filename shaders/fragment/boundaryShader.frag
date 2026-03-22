@@ -382,7 +382,6 @@ void main()
           }
         }
         break;
-      }
       case WALLTYPE_WATER:
         if (wall[VERT_DISTANCE] <= wallVerticalInfluence) {
           float localWaterTemperature = texture(baseTex, texCoordX0Ym)[TEMPERATURE];
@@ -419,6 +418,12 @@ void main()
       vec2 precipDeposition = texture(precipDepositionTex, texCoord).xy;
 
       vec4 lightAboveSurface = texture(lightTex, texCoordX0Yp); // sample cell above surface
+      bool hailImpact = precipDeposition[SNOW_DEPOSITION] >= hailDamageThreshold;
+      vec4 baseAboveSurface = texture(baseTex, texCoordX0Yp);
+      vec4 waterAboveSurface = texture(waterTex, texCoordX0Yp);
+      float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
+      float surfaceLandEvap = 0.0;
+      float evaporation = 0.0;
 
       switch (wall[TYPE]) {
       case WALLTYPE_INDUSTRIAL:
@@ -438,12 +443,7 @@ void main()
               wall[TYPE] = WALLTYPE_LAND;
           }
         }
-      case WALLTYPE_LAND: { // no break, can also be fire or urban:
-        bool hailImpact = precipDeposition[SNOW_DEPOSITION] >= hailDamageThreshold;
-        vec4 baseAboveSurface = texture(baseTex, texCoordX0Yp);
-        vec4 waterAboveSurface = texture(waterTex, texCoordX0Yp);
-        float realTempAboveSurface = potentialToRealT(baseAboveSurface[TEMPERATURE], texCoordX0Yp.y);
-
+      case WALLTYPE_LAND: // no break, can also be fire or urban:
         water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + precipDeposition[RAIN_DEPOSITION] * 0.1, 0.0, 1000.0); // rain accumulation
         water[SNOW] = clamp(water[SNOW] + precipDeposition[SNOW_DEPOSITION] * snowMassToHeight, 0.0, 4000.0);      // snow accumulation in cm
 
@@ -459,8 +459,8 @@ void main()
           }
         }
 
-        float surfaceLandEvap = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]);
-        float evaporation = surfaceLandEvap * 0.10;
+        surfaceLandEvap = calcLandEvaporation(realTempAboveSurface, waterAboveSurface[TOTAL], float(wall[VEGETATION]), water[SOIL_MOISTURE], lightAboveSurface[SUNLIGHT]);
+        evaporation = surfaceLandEvap * 0.10;
 
         water[SOIL_MOISTURE] -= evaporation;
 
@@ -511,7 +511,6 @@ void main()
           //}
         }
         break;
-      }
       case WALLTYPE_WATER:
 
         const float waterTempUpdateInterval = 20.0; // Update less often but with bigger value to reduce rounding error
