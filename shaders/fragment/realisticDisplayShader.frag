@@ -183,46 +183,39 @@ float deriveStrikeBranchStrength(vec2 pos, float strikeIntensity)
 
 vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeIntensity)
 {
-  vec2 cloudOffset = vec2(texCoord.x - pos.x, texCoord.y - pos.y * 0.78);
+  vec2 cloudOffset = vec2(texCoord.x - pos.x, texCoord.y - pos.y);
   cloudOffset.x *= aspectRatios[0];
 
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
   float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
-  float axis = cloudOffset.x * 0.92 + cloudOffset.y * 0.24;
-  float lateral = cloudOffset.y * 0.96 - cloudOffset.x * 0.18;
+  float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity) * 0.88;
 
-  float envelope = exp(-pow(axis / mix(0.13, 0.22, densityFactor), 2.0) - pow(lateral / mix(0.055, 0.095, densityFactor), 2.0));
-  float stringProgress = clamp(0.20 + axis * 2.5, 0.02, 0.98);
-  float stringScale = mix(5.5, 7.8, densityFactor);
+  float boltWidth = mix(0.16, 0.24, densityFactor);
+  float boltHeight = mix(0.18, 0.30, densityFactor);
+  vec2 boltCoord = vec2(cloudOffset.x / boltWidth + 0.5, 0.5 - cloudOffset.y / boltHeight);
 
-  float wiggleA = sin(axis * 34.0 + pos.x * 85.0) * 0.010;
-  float wiggleB = sin(axis * 29.0 + pos.y * 94.0 + 1.4) * 0.008;
-  float wiggleC = sin(axis * 31.0 + pos.x * 60.0 + 2.2) * 0.010;
+  if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
+    return vec3(0.0);
 
-  vec2 stringCoordA = vec2(0.5 + (lateral - 0.030 + wiggleA) * stringScale, stringProgress);
-  vec2 stringCoordB = vec2(0.5 + (lateral + wiggleB) * stringScale, clamp(stringProgress + 0.06, 0.02, 0.98));
-  vec2 stringCoordC = vec2(0.5 + (lateral + 0.030 + wiggleC) * stringScale, clamp(stringProgress - 0.05, 0.02, 0.98));
+  float coreCurve = sin(boltCoord.y * 18.0 + pos.x * 120.0) * 0.07;
+  coreCurve += sin(boltCoord.y * 31.0 + pos.y * 90.0 + 1.8) * 0.03;
+  boltCoord.x += coreCurve;
 
-  vec4 texA = texture(lightningTex, stringCoordA);
-  vec4 texB = texture(lightningTex, stringCoordB);
-  vec4 texC = texture(lightningTex, stringCoordC);
+  vec4 texLightning = texture(lightningTex, boltCoord);
+  float texCore = max(max(texLightning.r, texLightning.g), texLightning.b) * smoothstep(0.08, 0.24, texLightning.a);
+  float trunkMask = proceduralLightningTrunk(boltCoord, pos, strikeTemperature, branchStrength);
+  float branchMask = proceduralLightningBranches(boltCoord, pos, strikeTemperature, branchStrength);
 
-  float coreA = max(max(texA.r, texA.g), texA.b) * smoothstep(0.08, 0.24, texA.a);
-  float coreB = max(max(texB.r, texB.g), texB.b) * smoothstep(0.08, 0.24, texB.a);
-  float coreC = max(max(texC.r, texC.g), texC.b) * smoothstep(0.08, 0.24, texC.a);
+  float boltMask = max(trunkMask, branchMask * 0.92);
+  float directBolt = max(texCore * 0.75, boltMask);
 
-  float stringMaskA = exp(-pow((lateral - 0.030 + wiggleA) / mix(0.010, 0.016, densityFactor), 2.0));
-  float stringMaskB = exp(-pow((lateral + wiggleB) / mix(0.012, 0.018, densityFactor), 2.0));
-  float stringMaskC = exp(-pow((lateral + 0.030 + wiggleC) / mix(0.010, 0.016, densityFactor), 2.0));
-
-  float parallelStructure = coreA * stringMaskA + coreB * stringMaskB * 0.92 + coreC * stringMaskC * 0.88;
-  float sheath = exp(-pow(lateral / mix(0.026, 0.038, densityFactor), 2.0)) * 0.28;
-  float pulse = 0.86 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.14;
+  float glowEnvelope = exp(-pow(cloudOffset.x / (boltWidth * 0.82), 2.0) - pow(cloudOffset.y / (boltHeight * 0.88), 2.0));
+  float sheath = exp(-pow((boltCoord.x - 0.5) / mix(0.11, 0.16, densityFactor), 2.0)) * 0.16;
+  float pulse = 0.88 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.12;
   float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
   vec3 icColor = mix(vec3(1.0, 0.80, 0.66), vec3(0.86, 0.93, 1.0), thermalTint);
-  return icColor * envelope * (parallelStructure + sheath) * pulse * 3200.0 * max(1.22 - lightningTime * 0.18, 0.0);
+  return icColor * glowEnvelope * (directBolt + sheath) * pulse * 3200.0 * max(1.22 - lightningTime * 0.18, 0.0);
 }
-
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
 {
   vec2 lightningTexCoord = texCoord;

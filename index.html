@@ -659,6 +659,11 @@
             transform: translateY(0);
         }
 
+        .simulation-hud.is-hidden {
+            opacity: 0 !important;
+            transform: translateY(20px);
+        }
+
         .simulation-hud.compact {
             width: min(420px, calc(100vw - 48px));
         }
@@ -1121,6 +1126,7 @@
                     <tr><td>D</td><td>Show / Hide Droplets</td></tr>
                     <tr><td>X</td><td>Toggle follow droplet</td></tr>
                     <tr><td>G</td><td>Show / Hide Sounding Graph</td></tr>
+                    <tr><td>J</td><td>Show / Hide Simulation HUD</td></tr>
                     <tr><td>N</td><td>Show / Hide Weather Stations</td></tr>
                     <tr><td>M</td><td>Add / Remove Weather Stations</td></tr>
                     <tr><td>H</td><td>Show / Hide GUI</td></tr>

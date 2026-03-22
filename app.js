@@ -395,6 +395,14 @@ const toolLabels = {
 var simulationHud = null;
 var simulationHudHideTimer = null;
 
+function setSimulationHudVisibility(visible)
+{
+  const hud = ensureSimulationHud();
+  hud.shell.classList.toggle('is-hidden', !visible);
+  if (!visible)
+    hud.shell.classList.remove('visible');
+}
+
 function animateUiElement(element, className = 'ui-pulse')
 {
   if (!element)
@@ -494,6 +502,9 @@ function ensureSimulationHud()
 function showSimulationHudPulse()
 {
   const hud = ensureSimulationHud();
+  if (!guiControls?.showSimulationHud)
+    return;
+
   hud.shell.classList.add('visible');
   animateUiElement(hud.shell, 'ui-pulse');
   clearTimeout(simulationHudHideTimer);
@@ -508,6 +519,9 @@ function updateSimulationHud()
     return;
 
   const hud = ensureSimulationHud();
+  setSimulationHudVisibility(guiControls.showSimulationHud);
+  if (!guiControls.showSimulationHud)
+    return;
   const displayLabel = displayModeLabels[guiControls.displayMode] || guiControls.displayMode || 'Temperature';
   const toolLabel = toolLabels[guiControls.tool] || guiControls.tool || 'Flashlight';
   const weatherStationCount = weatherStations.length;
@@ -609,6 +623,7 @@ const guiControls_default = {
   brushIntensity : 0.01,
   allowCaves : true,
   showGraph : false,
+  showSimulationHud : true,
   showWindVectors : false,
   showWeatherStations : true,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
@@ -4192,6 +4207,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'SmoothCam').onChange(function() { cam.smooth = guiControls.SmoothCam; }).name('Smooth Camera');
 
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
+    display_folder.add(guiControls, 'showSimulationHud').onChange(function() { setSimulationHudVisibility(guiControls.showSimulationHud); updateSimulationHud(); }).name('Show Simulation HUD').listen();
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
@@ -4916,6 +4932,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       // G
       guiControls.showGraph = !guiControls.showGraph;
       hideOrShowGraph();
+    } else if (event.code == 'KeyJ') {
+      guiControls.showSimulationHud = !guiControls.showSimulationHud;
+      setSimulationHudVisibility(guiControls.showSimulationHud);
+      updateSimulationHud();
     } else if (event.code == 'Tab') {
       // TAB
       event.preventDefault();
