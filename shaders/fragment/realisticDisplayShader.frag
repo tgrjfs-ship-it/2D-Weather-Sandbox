@@ -139,7 +139,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   lightningTexCoord.y -= pos.y;
 
-  float scaleMult = 1. / pos.y; // 1.0 means lightning is as tall as the simheight
+  float scaleMult = 1. / clamp(pos.y, 0.35, 0.95); // clamp cloud-base scaling so low strikes do not become huge blobs
 
   lightningTexCoord.x *= scaleMult * aspectRatios[0] / lightningTexAspect;
   lightningTexCoord.y *= -scaleMult;
@@ -150,9 +150,10 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
     return vec3(0);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
-  float texMask = smoothstep(0.10, 0.35, lightningTexel.a);
-  float pixVal = max(max(lightningTexel.r, lightningTexel.g), max(lightningTexel.b, lightningTexel.a));
-  pixVal *= texMask;
+  float texMask = smoothstep(0.16, 0.42, lightningTexel.a);
+  float boltCore = max(max(lightningTexel.r, lightningTexel.g), lightningTexel.b);
+  float glow = lightningTexel.a * 0.45;
+  float pixVal = mix(boltCore, glow, 0.22) * texMask;
 
   const float branchShowFactor = 2.1;      // 1.5
   const float leaderBrightness = 12000.;    // 200.0
