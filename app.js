@@ -344,6 +344,8 @@ var chargeGridW = 96;
 var chargeGridH = 72;
 var chargeLinksLastStrikeIter = -1000;
 var chargeSystemWarmupUntilIter = 320;
+var cachedChargeSources = [];
+var lastChargeSourceScanIter = -1000;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -4766,33 +4768,43 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     createHdrFBO();    // recreate hdr framebuffer
   });
 
-  function collectChargeSources(sampleCount = 12)
+  function collectChargeSources(currentIter, sampleColumns = 18)
   {
+    if (currentIter - lastChargeSourceScanIter < 4)
+      return cachedChargeSources;
+
     const sources = [];
+    const yStart = Math.floor(sim_res_y * 0.15);
+    const yEnd = Math.floor(sim_res_y * 0.96);
+    const rotation = Math.floor(currentIter * 0.73) % sim_res_x;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
 
-    for (let i = 0; i < sampleCount; i++) {
-      const simX = Math.floor(Math.random() * sim_res_x);
-      const simY = Math.floor((0.20 + Math.random() * 0.75) * sim_res_y); // focus on cloud-bearing altitudes
-      const normY = simY / sim_res_y;
+    for (let col = 0; col < sampleColumns; col++) {
+      const simX = Math.floor(((col + 0.5) / sampleColumns) * sim_res_x + rotation) % sim_res_x;
+      const baseColumn = new Float32Array(sim_res_y * 4);
+      const waterColumn = new Float32Array(sim_res_y * 4);
 
       gl.readBuffer(gl.COLOR_ATTACHMENT0);
-      const baseSample = new Float32Array(4);
-      gl.readPixels(simX, simY, 1, 1, gl.RGBA, gl.FLOAT, baseSample);
-
+      gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, baseColumn);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
-      const waterSample = new Float32Array(4);
-      gl.readPixels(simX, simY, 1, 1, gl.RGBA, gl.FLOAT, waterSample);
+      gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, waterColumn);
 
-      if (baseSample[3] >= 500.0 || waterSample[0] > 1000.0)
-        continue; // wall / surface code, not fluid cloud
+      let candidatesAdded = 0;
+      for (let simY = yStart; simY < yEnd && candidatesAdded < 3; simY++) {
+        const idx = simY * 4;
+        const potentialT = baseColumn[idx + 3];
+        const totalWater = waterColumn[idx + 0];
+        const cloudDensity = Math.max(waterColumn[idx + 1], 0.0);
 
-      const updraft = Math.max(baseSample[1], 0.0);
-      const cloudDensity = Math.max(waterSample[1], 0.0);
-      const denseCloud = cloudDensity > 0.22;
-      const coldEnough = potentialToRealT(baseSample[3], simY) < CtoK(-2.0);
+        if (potentialT >= 500.0 || totalWater > 1000.0 || cloudDensity <= 0.22)
+          continue;
 
-      if (denseCloud && coldEnough) {
+        const tempK = potentialToRealT(potentialT, simY);
+        if (tempK > CtoK(-2.0))
+          continue;
+
+        const updraft = Math.max(baseColumn[idx + 1], 0.0);
+        const normY = simY / sim_res_y;
         sources.push({
           x : simX / sim_res_x,
           y : normY,
@@ -4800,9 +4812,13 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
           cloudDensity,
           tag : (simX * 4099 + simY * 131) * 0.00001
         });
+        candidatesAdded++;
       }
     }
-    return sources;
+
+    cachedChargeSources = sources;
+    lastChargeSourceScanIter = currentIter;
+    return cachedChargeSources;
   }
 
   function logSample()
@@ -6631,7 +6647,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
-              const chargeSources = collectChargeSources(Math.max(8, Math.round(guiControls.IterPerFrame * 1.2)));
+              const chargeSources = collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.6)));
               const chargeStrike = updateChargeSeparationSystem(iterNum, chargeSources, guiControls.IterPerFrame);
               if (chargeStrike) {
                 const lightningDataValues = new Float32Array([
