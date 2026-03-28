@@ -22,8 +22,6 @@ float realTemp;
 
 uniform sampler2D baseTex;
 uniform sampler2D waterTex;
-uniform sampler2D lightningDataTex;
-
 uniform vec2 resolution;
 uniform vec2 texelSize;
 uniform float dryLapse;
@@ -55,8 +53,6 @@ float newDensity;
 
 bool isActive = true;
 bool spawned = false; // spawned in this iteration
-bool lightningSpawned = false;
-
 void disableDroplet()
 {
   newMass[WATER] = -2. - dropPosition.x; // disable droplet by making it negative and save position as seed for respawning
@@ -118,28 +114,6 @@ void main()
           feedback[HEAT] += newMass[ICE] * meltingHeat;                  // add heat of freezing
           newDensity = snowDensity;
 
-          vec4 lightningData = texelFetch(lightningDataTex, ivec2(0, 0), 0); // data from last lightning bolt
-
-          const float lightningCloudDensityThreshold = 0.0;          // 3.0
-          const float lightningChanceMultiplier = 10.5;            // 0.0011
-
-          float cloudPlusPrecipDensity = water[CLOUD] + water[PRECIPITATION];
-
-          float lightningSpawnChance = max((cloudPlusPrecipDensity - lightningCloudDensityThreshold) * lightningChanceMultiplier, 0.);
-
-          const float minIterationsSinceLastLightningBolt = 0.; // 50.
-
-          if (lightningData[START_ITERNUM] < iterNum - minIterationsSinceLastLightningBolt &&
-              random2d(vec2(base[TEMPERATURE] * 16.0, water[TOTAL] * 8.0)) < lightningSpawnChance) { // Spawn lightning
-            lightningSpawned = true;
-            isActive = false;
-            gl_PointSize = 1.0;
-            feedback.xy = texCoord;
-            feedback[START_ITERNUM] = iterNum;
-            float icVsCgNoise = random2d(texCoord * 12.1 + vec2(iterNum * 0.01, cloudPlusPrecipDensity));
-            feedback[INTENSITY] = clamp(cloudPlusPrecipDensity / 8.0 + (icVsCgNoise - 0.02) * 1.45, 0.30, 4.0);
-            gl_Position = vec4(vec2(-1. + texelSize.x * 3., -1. + texelSize.y), 0.0, 1.0); // render to bottem left corner (1, 0)
-          }
         } else {
           newMass[WATER] = initalMass; // rain
           newMass[ICE] = 0.0;
@@ -150,10 +124,8 @@ void main()
     }
 
     if (spawned) {
-      if (!lightningSpawned) {
-        gl_PointSize = 1.0;
-        gl_Position = vec4(newPos, 0.0, 1.0);
-      }
+      gl_PointSize = 1.0;
+      gl_Position = vec4(newPos, 0.0, 1.0);
     } else { // still inactive
       isActive = false;
       gl_PointSize = 1.0;
