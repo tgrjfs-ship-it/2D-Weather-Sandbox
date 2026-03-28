@@ -337,9 +337,11 @@ var currentLightningProfile = null;
 var lightningHistoryData = new Float32Array(8);
 var latestLightningPos = null;
 var simStepRequested = false;
-var chargeParticles = [];
-var groundCharges = [];
-var chargeReservoirs = new Map();
+var chargeGridPositive = null;
+var chargeGridNegative = null;
+var chargeCellActivation = null;
+var chargeGridW = 96;
+var chargeGridH = 72;
 var chargeLinksLastStrikeIter = -1000;
 var chargeSystemWarmupUntilIter = 320;
 
@@ -580,166 +582,122 @@ function deriveLightningProfile(x, y, intensity, chargeContrast = intensity)
   };
 }
 
-function seedGroundCharges()
+function initChargeSeparationGrid()
 {
-  groundCharges.length = 0;
-  const count = 28;
-  for (let i = 0; i < count; i++) {
-    groundCharges.push({
-      x : (i + 0.5) / count,
-      y : 0.0,
-      sign : -1,
-      magnitude : 0.18 + Math.random() * 0.30,
-    });
-  }
+  const size = chargeGridW * chargeGridH;
+  chargeGridPositive = new Float32Array(size);
+  chargeGridNegative = new Float32Array(size);
+  chargeCellActivation = new Uint16Array(size);
 }
 
-function spawnChargeParticle(chargeSource, iterationSeed)
-{
-  const sourceUpdraft = chargeSource?.updraft || 0.0;
-  const sourceCloudDensity = chargeSource?.cloudDensity || 0.0;
-  const sourceY = clamp(chargeSource?.y ?? 0.5, 0.12, 0.98);
-  const positiveBias = clamp((sourceUpdraft - 0.002) * 65.0 + sourceY * 0.2, 0.0, 1.0);
-  const positive = Math.random() < positiveBias ? 1 : -1;
-  const spawnY = positive > 0 ? clamp(sourceY + 0.02 + Math.random() * 0.08, 0.18, 0.98) : clamp(sourceY - (0.02 + Math.random() * 0.10), 0.08, 0.90);
-  const maturationDelay = 40 + Math.floor((1.0 - clamp(sourceCloudDensity / 2.8, 0.0, 1.0)) * 70.0) + Math.floor(Math.random() * 35);
-  chargeParticles.push({
-    x : mod((chargeSource?.x ?? Math.random()) + (Math.random() - 0.5) * 0.04, 1.0),
-    y : spawnY,
-    sign : positive,
-    magnitude : 0.22 + sourceCloudDensity * 0.42 + Math.random() * 0.35,
-    life : 300 + Math.floor(Math.random() * 260),
-    age : 0,
-    matureAfter : maturationDelay,
-    seed : iterationSeed + Math.random() * 100.0,
-    sourceTag : chargeSource?.tag ?? 0.0
-  });
-}
+function chargeGridIndex(x, y) { return y * chargeGridW + x; }
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (groundCharges.length == 0)
-    seedGroundCharges();
+  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation)
+    initChargeSeparationGrid();
 
-  const activeSourceKeys = new Set();
+  const size = chargeGridW * chargeGridH;
+
+  for (let i = 0; i < size; i++) {
+    chargeGridPositive[i] *= 0.992;
+    chargeGridNegative[i] *= 0.992;
+    if (chargeCellActivation[i] > 0)
+      chargeCellActivation[i] -= 1;
+  }
+
   if (chargeSources && chargeSources.length > 0) {
-    for (let i = 0; i < chargeSources.length && chargeParticles.length < 320; i++) {
+    for (let i = 0; i < chargeSources.length; i++) {
       const source = chargeSources[i];
-      const keyX = Math.floor(source.x * 32.0);
-      const keyY = Math.floor(source.y * 32.0);
-      const key = keyX + ':' + keyY;
-      activeSourceKeys.add(key);
-
-      const sourceEnergy = Math.max(source.cloudDensity * 0.52 + source.updraft * 250.0, 0.0);
-      const prevReservoir = chargeReservoirs.get(key) || 0.0;
-      const nextReservoir = Math.min(prevReservoir + sourceEnergy * (0.16 + iterScale * 0.01), 6.0);
-      chargeReservoirs.set(key, nextReservoir);
-
-      if (nextReservoir >= 1.0) {
-        spawnChargeParticle(source, currentIter * 0.01 + i * 0.7);
-        chargeReservoirs.set(key, nextReservoir - 1.0);
-      }
+      const x = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
+      const y = clamp(Math.floor(source.y * chargeGridH), 1, chargeGridH - 2);
+      const idx = chargeGridIndex(x, y);
+      const injection = (source.cloudDensity * 0.42 + source.updraft * 220.0) * (0.11 + iterScale * 0.008);
+      chargeGridPositive[idx] = Math.min(chargeGridPositive[idx] + injection * 0.55, 5.0);
+      chargeGridNegative[idx] = Math.min(chargeGridNegative[idx] + injection * 0.45, 5.0);
+      chargeCellActivation[idx] = Math.min(chargeCellActivation[idx] + 3, 65535);
     }
   }
 
-  if (chargeReservoirs.size > 0) {
-    for (const [ key, value ] of chargeReservoirs.entries()) {
-      const passiveDecay = activeSourceKeys.has(key) ? 0.996 : 0.965;
-      const nextValue = value * passiveDecay;
-      if (nextValue < 0.03)
-        chargeReservoirs.delete(key);
-      else
-        chargeReservoirs.set(key, nextValue);
+  // Separate charges vertically (positive aloft, negative lower), with diffusion.
+  for (let y = 1; y < chargeGridH - 1; y++) {
+    for (let x = 0; x < chargeGridW; x++) {
+      const idx = chargeGridIndex(x, y);
+      const upIdx = chargeGridIndex(x, y + 1);
+      const downIdx = chargeGridIndex(x, y - 1);
+      const leftIdx = chargeGridIndex((x - 1 + chargeGridW) % chargeGridW, y);
+      const rightIdx = chargeGridIndex((x + 1) % chargeGridW, y);
+
+      const pTransfer = chargeGridPositive[idx] * 0.036;
+      const nTransfer = chargeGridNegative[idx] * 0.034;
+      chargeGridPositive[idx] -= pTransfer;
+      chargeGridPositive[upIdx] = Math.min(chargeGridPositive[upIdx] + pTransfer * 0.78, 6.0);
+      chargeGridPositive[leftIdx] = Math.min(chargeGridPositive[leftIdx] + pTransfer * 0.11, 6.0);
+      chargeGridPositive[rightIdx] = Math.min(chargeGridPositive[rightIdx] + pTransfer * 0.11, 6.0);
+
+      chargeGridNegative[idx] -= nTransfer;
+      chargeGridNegative[downIdx] = Math.min(chargeGridNegative[downIdx] + nTransfer * 0.78, 6.0);
+      chargeGridNegative[leftIdx] = Math.min(chargeGridNegative[leftIdx] + nTransfer * 0.11, 6.0);
+      chargeGridNegative[rightIdx] = Math.min(chargeGridNegative[rightIdx] + nTransfer * 0.11, 6.0);
     }
   }
 
-  const charges = chargeParticles;
-  for (let i = charges.length - 1; i >= 0; i--) {
-    const p = charges[i];
-    p.age += 1;
-    const drift = p.sign > 0 ? 0.0016 : -0.0014;
-    const swirl = Math.sin((currentIter * 0.018 + p.seed + p.y * 7.0)) * 0.0012;
-    p.x = mod(p.x + swirl + (Math.random() - 0.5) * 0.0024, 1.0);
-    p.y += drift + (Math.random() - 0.5) * 0.0014;
-    p.y = clamp(p.y, 0.02, 0.99);
-    p.life -= 1;
-    p.magnitude = Math.max(0.05, p.magnitude - 0.0006);
-    if (p.life <= 0 || p.magnitude <= 0.05) {
-      charges.splice(i, 1);
-    }
+  // Ground induction: positive charge aloft raises opposite-sign image charge near ground.
+  for (let x = 0; x < chargeGridW; x++) {
+    const bottom = chargeGridIndex(x, 0);
+    const low = chargeGridIndex(x, 1);
+    chargeGridNegative[bottom] = Math.min(chargeGridNegative[bottom] + chargeGridPositive[low] * 0.08, 6.0);
   }
 
-  for (let i = 0; i < groundCharges.length; i++) {
-    const g = groundCharges[i];
-    g.magnitude = 0.12 + Math.abs(Math.sin(currentIter * 0.003 + g.x * 14.0)) * 0.6;
-    g.sign = -1;
-  }
-
-  if (currentIter - chargeLinksLastStrikeIter < 8)
-    return null;
-  if (currentIter < chargeSystemWarmupUntilIter)
+  if (currentIter - chargeLinksLastStrikeIter < 10 || currentIter < chargeSystemWarmupUntilIter)
     return null;
 
-  let bestPair = null;
+  let best = null;
   let bestScore = 0.0;
+  for (let y = 2; y < chargeGridH - 1; y++) {
+    for (let x = 0; x < chargeGridW; x++) {
+      const idx = chargeGridIndex(x, y);
+      const p = chargeGridPositive[idx];
+      const nBelow = chargeGridNegative[chargeGridIndex(x, y - 1)];
+      const nGround = chargeGridNegative[chargeGridIndex(x, 0)];
+      const localPotential = p - nBelow;
+      const activation = chargeCellActivation[idx];
 
-  for (let i = 0; i < charges.length; i++) {
-    const a = charges[i];
-    if (a.age < a.matureAfter)
-      continue;
-    for (let j = i + 1; j < charges.length; j++) {
-      const b = charges[j];
-      if (b.age < b.matureAfter)
+      if (activation < 16 || p < 0.25)
         continue;
-      if (a.sign == b.sign)
-        continue;
-      const dx = Math.min(Math.abs(a.x - b.x), 1.0 - Math.abs(a.x - b.x));
-      const dy = Math.abs(a.y - b.y);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0.075)
-        continue;
-      const chargeContrast = (a.magnitude + b.magnitude) * (1.0 - dist / 0.075);
-      if (chargeContrast > bestScore) {
-        bestScore = chargeContrast;
-        bestPair = {a, b, dist, chargeContrast, cloudToGround : false};
+
+      const ccScore = localPotential * 0.9 + (p + nBelow) * 0.2;
+      if (nBelow > 0.18 && ccScore > bestScore) {
+        bestScore = ccScore;
+        best = {x, y, contrast : p + nBelow, cloudToGround : false};
       }
-    }
 
-    for (let g = 0; g < groundCharges.length; g++) {
-      const ground = groundCharges[g];
-      if (a.sign == ground.sign)
-        continue;
-      const dx = Math.min(Math.abs(a.x - ground.x), 1.0 - Math.abs(a.x - ground.x));
-      const dy = Math.abs(a.y - ground.y);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0.20)
-        continue;
-      const chargeContrast = (a.magnitude + ground.magnitude) * (1.0 - dist / 0.20) * (1.2 + (0.5 - a.y) * 0.3);
-      if (chargeContrast > bestScore) {
-        bestScore = chargeContrast;
-        bestPair = {a, b : ground, dist, chargeContrast, cloudToGround : true};
+      const cgScore = (p + nGround) * (1.0 - y / chargeGridH) * 1.35;
+      if (nGround > 0.22 && cgScore > bestScore) {
+        bestScore = cgScore;
+        best = {x, y, contrast : p + nGround, cloudToGround : true};
       }
     }
   }
 
-  if (!bestPair || bestScore < 0.42)
+  if (!best || bestScore < 0.46)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
-  const strikeX = mod((bestPair.a.x + bestPair.b.x) * 0.5, 1.0);
-  const strikeY = bestPair.cloudToGround ? bestPair.a.y : Math.max(bestPair.a.y, bestPair.b.y);
-  const strikeIntensity = clamp(0.35 + bestPair.chargeContrast * (bestPair.cloudToGround ? 1.3 : 1.0), 0.35, 4.0);
-
-  bestPair.a.magnitude *= 0.55;
-  if (!bestPair.cloudToGround && bestPair.b && bestPair.b.magnitude !== undefined)
-    bestPair.b.magnitude *= 0.55;
+  const strikeX = (best.x + 0.5) / chargeGridW;
+  const strikeY = (best.y + 0.5) / chargeGridH;
+  const strikeIntensity = clamp(0.40 + best.contrast * (best.cloudToGround ? 1.25 : 0.95), 0.40, 4.0);
+  const srcIdx = chargeGridIndex(best.x, best.y);
+  chargeGridPositive[srcIdx] *= 0.35;
+  chargeGridNegative[srcIdx] *= 0.40;
+  chargeCellActivation[srcIdx] = 0;
 
   return {
     x : strikeX,
     y : strikeY,
     intensity : strikeIntensity,
-    chargeContrast : bestPair.chargeContrast,
-    cloudToGround : bestPair.cloudToGround
+    chargeContrast : best.contrast,
+    cloudToGround : best.cloudToGround
   };
 }
 
