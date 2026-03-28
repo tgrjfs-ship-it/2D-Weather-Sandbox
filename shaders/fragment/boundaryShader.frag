@@ -27,6 +27,7 @@ uniform float vorticity;
 uniform float waterEvaporation;
 uniform float landEvaporation;
 uniform float waterWeight;
+uniform float waterTemperature;
 uniform sampler2D initialProfileTex;
 uniform bool allowCaves;
 
@@ -515,7 +516,9 @@ void main()
 
         const float waterTempUpdateInterval = 20.0; // Update less often but with bigger value to reduce rounding error
 
-        if (dynamicWaterTemperature >= 1.0 && mod(iterNum, waterTempUpdateInterval) < 0.5) {
+        if (dynamicWaterTemperature < 1.0) {
+          base[TEMPERATURE] = waterTemperature;
+        } else if (mod(iterNum, waterTempUpdateInterval) < 0.5) {
 
           // average out temperature
           float numNeighbors = 0.;

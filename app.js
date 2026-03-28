@@ -337,6 +337,10 @@ var currentLightningProfile = null;
 var lightningHistoryData = new Float32Array(8);
 var latestLightningPos = null;
 var simStepRequested = false;
+var chargeParticleOverlay = null;
+var chargeParticles = [];
+var groundCharges = [];
+var chargeLinksLastStrikeIter = -1000;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -369,8 +373,8 @@ const displayModeLabels = {
 const loadingTips = [
   'Tip: higher horizontal resolution encourages broader converging flow and larger storm structures.',
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
-  'Tip: denser storm cores now randomize lightning temperature automatically for each strike.',
-  'Tip: use real-world soundings to seed environments, then chase the density-driven lightning profiles in-sim.',
+  'Tip: the lightning engine now follows + and - charge packets instead of cloud-density triggers.',
+  'Tip: charge links can connect cloud-to-cloud and cloud-to-ground, so low-level charge pockets can spark CG strikes.',
   'Tip: use the built-in randomize controls in the main UI folders for fast time, brush, and display experiments.'
 ];
 
@@ -478,7 +482,7 @@ function ensureSimulationHud()
       <div class="sim-hud-card">
         <span class="sim-hud-label">Lightning</span>
         <strong class="sim-hud-value" data-hud-field="lightning">Awaiting strike</strong>
-        <p class="sim-hud-hints">Strong, dense cores now drive hotter lightning visuals.</p>
+        <p class="sim-hud-hints">Charge-separated + / - packets now drive lightning visuals.</p>
       </div>
       <div class="sim-hud-card sim-assistant-card">
         <span class="sim-hud-label">AI Assistant</span>
@@ -557,13 +561,13 @@ function setWeatherStationsVisibility(visible)
   updateSimulationHud();
 }
 
-function deriveLightningProfile(x, y, intensity)
+function deriveLightningProfile(x, y, intensity, chargeContrast = intensity)
 {
-  const densityFactor = Math.max(0.0, Math.min((intensity - 0.3) / 3.7, 1.0));
+  const densityFactor = Math.max(0.0, Math.min((chargeContrast - 0.2) / 2.6, 1.0));
   const altitudeFactor = Math.max(0.0, Math.min(1.0 - y, 1.0));
   const rand = (value) => value - Math.floor(value);
-  const thermalNoise = rand(Math.sin((x * 91.7 + y * 67.3 + intensity * 13.1) * 12.9898) * 43758.5453);
-  const branchNoise = rand(Math.sin((x * 41.3 + y * 103.9 + intensity * 7.7) * 78.233) * 24634.6345);
+  const thermalNoise = rand(Math.sin((x * 91.7 + y * 67.3 + chargeContrast * 13.1) * 12.9898) * 43758.5453);
+  const branchNoise = rand(Math.sin((x * 41.3 + y * 103.9 + chargeContrast * 7.7) * 78.233) * 24634.6345);
   const thermalBlend = Math.min(densityFactor * 0.58 + altitudeFactor * 0.26 + thermalNoise * 0.16, 1.0);
   const temperature = 14500.0 + 19500.0 * thermalBlend;
   return {
@@ -573,6 +577,200 @@ function deriveLightningProfile(x, y, intensity)
     branchFactor : 1.02 + densityFactor * 0.68 + altitudeFactor * 0.18 + branchNoise * 0.24,
     shakeFactor : (0.55 + densityFactor * 0.55) * (0.72 + ((temperature - 14500.0) / 19500.0) * 0.78),
   };
+}
+
+function ensureChargeParticleOverlay()
+{
+  if (chargeParticleOverlay)
+    return chargeParticleOverlay;
+
+  const canvasEl = document.createElement('canvas');
+  canvasEl.id = 'chargeParticleOverlay';
+  canvasEl.style.position = 'fixed';
+  canvasEl.style.left = '0';
+  canvasEl.style.top = '0';
+  canvasEl.style.width = '100vw';
+  canvasEl.style.height = '100vh';
+  canvasEl.style.pointerEvents = 'none';
+  canvasEl.style.zIndex = '14';
+  canvasEl.width = window.innerWidth;
+  canvasEl.height = window.innerHeight;
+  document.body.appendChild(canvasEl);
+
+  chargeParticleOverlay = {
+    canvas : canvasEl,
+    ctx : canvasEl.getContext('2d')
+  };
+  return chargeParticleOverlay;
+}
+
+function resizeChargeParticleOverlay()
+{
+  if (!chargeParticleOverlay)
+    return;
+  chargeParticleOverlay.canvas.width = window.innerWidth;
+  chargeParticleOverlay.canvas.height = window.innerHeight;
+}
+
+function seedGroundCharges()
+{
+  groundCharges.length = 0;
+  const count = 28;
+  for (let i = 0; i < count; i++) {
+    groundCharges.push({
+      x : (i + 0.5) / count,
+      y : 0.0,
+      sign : (i % 2 == 0 ? 1 : -1),
+      magnitude : 0.18 + Math.random() * 0.30,
+    });
+  }
+}
+
+function spawnChargeParticle(iterationSeed)
+{
+  const positive = Math.random() > 0.5 ? 1 : -1;
+  const spawnY = positive > 0 ? (0.42 + Math.random() * 0.46) : (0.16 + Math.random() * 0.58);
+  chargeParticles.push({
+    x : Math.random(),
+    y : spawnY,
+    sign : positive,
+    magnitude : 0.24 + Math.random() * 0.86,
+    life : 230 + Math.floor(Math.random() * 220),
+    seed : iterationSeed + Math.random() * 100.0
+  });
+}
+
+function updateChargeSeparationSystem(currentIter, iterScale = 1.0)
+{
+  if (groundCharges.length == 0)
+    seedGroundCharges();
+
+  const spawnBase = Math.max(1, Math.round(iterScale * 2.6));
+  for (let i = 0; i < spawnBase; i++) {
+    if (Math.random() < 0.78 && chargeParticles.length < 260)
+      spawnChargeParticle(currentIter * 0.01 + i * 0.7);
+  }
+
+  const charges = chargeParticles;
+  for (let i = charges.length - 1; i >= 0; i--) {
+    const p = charges[i];
+    const drift = p.sign > 0 ? 0.0016 : -0.0014;
+    const swirl = Math.sin((currentIter * 0.018 + p.seed + p.y * 7.0)) * 0.0012;
+    p.x = mod(p.x + swirl + (Math.random() - 0.5) * 0.0024, 1.0);
+    p.y += drift + (Math.random() - 0.5) * 0.0014;
+    p.y = clamp(p.y, 0.02, 0.99);
+    p.life -= 1;
+    p.magnitude = Math.max(0.05, p.magnitude - 0.0009);
+    if (p.life <= 0 || p.magnitude <= 0.05) {
+      charges.splice(i, 1);
+    }
+  }
+
+  for (let i = 0; i < groundCharges.length; i++) {
+    const g = groundCharges[i];
+    g.magnitude = 0.12 + Math.abs(Math.sin(currentIter * 0.003 + g.x * 14.0)) * 0.6;
+    g.sign = -1;
+  }
+
+  if (currentIter - chargeLinksLastStrikeIter < 8)
+    return null;
+
+  let bestPair = null;
+  let bestScore = 0.0;
+
+  for (let i = 0; i < charges.length; i++) {
+    const a = charges[i];
+    for (let j = i + 1; j < charges.length; j++) {
+      const b = charges[j];
+      if (a.sign == b.sign)
+        continue;
+      const dx = Math.min(Math.abs(a.x - b.x), 1.0 - Math.abs(a.x - b.x));
+      const dy = Math.abs(a.y - b.y);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0.075)
+        continue;
+      const chargeContrast = (a.magnitude + b.magnitude) * (1.0 - dist / 0.075);
+      if (chargeContrast > bestScore) {
+        bestScore = chargeContrast;
+        bestPair = {a, b, dist, chargeContrast, cloudToGround : false};
+      }
+    }
+
+    for (let g = 0; g < groundCharges.length; g++) {
+      const ground = groundCharges[g];
+      if (a.sign == ground.sign)
+        continue;
+      const dx = Math.min(Math.abs(a.x - ground.x), 1.0 - Math.abs(a.x - ground.x));
+      const dy = Math.abs(a.y - ground.y);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0.20)
+        continue;
+      const chargeContrast = (a.magnitude + ground.magnitude) * (1.0 - dist / 0.20) * (1.2 + (0.5 - a.y) * 0.3);
+      if (chargeContrast > bestScore) {
+        bestScore = chargeContrast;
+        bestPair = {a, b : ground, dist, chargeContrast, cloudToGround : true};
+      }
+    }
+  }
+
+  if (!bestPair || bestScore < 0.42)
+    return null;
+
+  chargeLinksLastStrikeIter = currentIter;
+  const strikeX = mod((bestPair.a.x + bestPair.b.x) * 0.5, 1.0);
+  const strikeY = bestPair.cloudToGround ? bestPair.a.y : Math.max(bestPair.a.y, bestPair.b.y);
+  const strikeIntensity = clamp(0.35 + bestPair.chargeContrast * (bestPair.cloudToGround ? 1.3 : 1.0), 0.35, 4.0);
+
+  bestPair.a.magnitude *= 0.55;
+  if (!bestPair.cloudToGround && bestPair.b && bestPair.b.magnitude !== undefined)
+    bestPair.b.magnitude *= 0.55;
+
+  return {
+    x : strikeX,
+    y : strikeY,
+    intensity : strikeIntensity,
+    chargeContrast : bestPair.chargeContrast
+  };
+}
+
+function drawChargeParticleOverlay()
+{
+  if (!chargeParticleOverlay && (SETUP_MODE || !guiControls || guiControls.displayMode != 'DISP_REAL'))
+    return;
+  const overlay = ensureChargeParticleOverlay();
+  const ctx = overlay.ctx;
+  resizeChargeParticleOverlay();
+  const w = overlay.canvas.width;
+  const h = overlay.canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (SETUP_MODE || !guiControls || guiControls.displayMode != 'DISP_REAL')
+    return;
+  ctx.globalCompositeOperation = 'lighter';
+
+  for (let i = 0; i < groundCharges.length; i++) {
+    const g = groundCharges[i];
+    const x = g.x * w;
+    const y = h - 8;
+    ctx.fillStyle = 'rgba(255, 80, 80, 0.22)';
+    ctx.beginPath();
+    ctx.arc(x, y, 2.0 + g.magnitude * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < chargeParticles.length; i++) {
+    const p = chargeParticles[i];
+    const x = p.x * w;
+    const y = (1.0 - p.y) * h;
+    ctx.fillStyle = p.sign > 0 ? 'rgba(255, 92, 92, 0.45)' : 'rgba(90, 140, 255, 0.45)';
+    ctx.beginPath();
+    ctx.arc(x, y, 1.2 + p.magnitude * 2.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = p.sign > 0 ? 'rgba(255, 160, 160, 0.7)' : 'rgba(185, 210, 255, 0.7)';
+    ctx.font = '9px sans-serif';
+    ctx.fillText(p.sign > 0 ? '+' : '−', x - 2.0, y + 3.0);
+  }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 
@@ -4623,6 +4821,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas_aspect = canvas.width / canvas.height;
+    resizeChargeParticleOverlay();
 
     soundingGraph.graphCanvas.height = window.innerHeight;
     soundingGraph.graphCanvas.width = window.innerHeight;
@@ -6459,36 +6658,29 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
 
-              // Extract lightningLocation from precipitationfeedback
-              gl.useProgram(lightningLocationProgram);
-              gl.uniform1f(gl.getUniformLocation(lightningLocationProgram, 'iterNum'), iterNum);
-
-              gl.activeTexture(gl.TEXTURE0);
-              gl.bindTexture(gl.TEXTURE_2D, precipitationFeedbackTexture);
-
-              gl.bindFramebuffer(gl.FRAMEBUFFER, lightningDataFrameBuff);
-              gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
-              gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-              gl.readBuffer(gl.COLOR_ATTACHMENT0);
-              var lightningDataValues = new Float32Array(4);
-              gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, lightningDataValues);
-              // console.log('lightningDataValues: ', lightningDataValues[0], lightningDataValues[1], lightningDataValues[2], iterNum, lightningDataValues[3]);
-
-              if (Math.round(lightningDataValues[2]) == iterNum) {
+              const chargeStrike = updateChargeSeparationSystem(iterNum, guiControls.IterPerFrame);
+              if (chargeStrike) {
+                const lightningDataValues = new Float32Array([
+                  chargeStrike.x,
+                  chargeStrike.y,
+                  iterNum,
+                  chargeStrike.intensity
+                ]);
                 lightningHistoryData.copyWithin(4, 0, 4);
                 lightningHistoryData.set(lightningDataValues, 0);
                 uploadLightningHistoryTexture();
 
-                latestLightningPos = {x : lightningDataValues[0], y : lightningDataValues[1]};
-                currentLightningProfile = deriveLightningProfile(lightningDataValues[0], lightningDataValues[1], lightningDataValues[3]);
+                latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
+                currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, chargeStrike.chargeContrast);
                 const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
-                const lightningIntensity = Math.pow(lightningDataValues[3], 2.0) * lightningThermalBoost;
-                cam.triggerShake(lightningDataValues[3] * currentLightningProfile.shakeFactor);
+                const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
+                cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor);
                 updateSimulationHud();
                 if (guiControls.sound) {
-                  soundSystem.soundThunder(lightningDataValues[0], lightningDataValues[1], lightningIntensity);
+                  soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
                 }
+              } else {
+                updateChargeSeparationSystem(iterNum, guiControls.IterPerFrame * 0.25);
               }
             }
 
@@ -6966,6 +7158,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         weatherStations[i].updateCanvas(); // update weather stations
       }
     }
+    drawChargeParticleOverlay();
 
     frameNum++;
     requestAnimationFrame(draw);
