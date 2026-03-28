@@ -611,11 +611,16 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const source = chargeSources[i];
       const x = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
       const y = clamp(Math.floor(source.y * chargeGridH), 1, chargeGridH - 2);
-      const idx = chargeGridIndex(x, y);
-      const injection = (source.cloudDensity * 0.42 + source.updraft * 220.0) * (0.11 + iterScale * 0.008);
-      chargeGridPositive[idx] = Math.min(chargeGridPositive[idx] + injection * 0.55, 5.0);
-      chargeGridNegative[idx] = Math.min(chargeGridNegative[idx] + injection * 0.45, 5.0);
-      chargeCellActivation[idx] = Math.min(chargeCellActivation[idx] + 3, 65535);
+      const upperIdx = chargeGridIndex(x, clamp(y + 1, 1, chargeGridH - 1));
+      const lowerIdx = chargeGridIndex(x, clamp(y - 1, 0, chargeGridH - 2));
+      const centerIdx = chargeGridIndex(x, y);
+      const injection = source.cloudDensity * (0.17 + iterScale * 0.012);
+      const updraftAssist = clamp(source.updraft * 60.0, 0.0, 0.32);
+      chargeGridPositive[upperIdx] = Math.min(chargeGridPositive[upperIdx] + injection * (0.62 + updraftAssist), 6.0);
+      chargeGridNegative[lowerIdx] = Math.min(chargeGridNegative[lowerIdx] + injection * (0.62 + (1.0 - updraftAssist) * 0.2), 6.0);
+      chargeGridPositive[centerIdx] = Math.min(chargeGridPositive[centerIdx] + injection * 0.16, 6.0);
+      chargeGridNegative[centerIdx] = Math.min(chargeGridNegative[centerIdx] + injection * 0.16, 6.0);
+      chargeCellActivation[centerIdx] = Math.min(chargeCellActivation[centerIdx] + 5, 65535);
     }
   }
 
@@ -642,11 +647,12 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     }
   }
 
-  // Ground induction: positive charge aloft raises opposite-sign image charge near ground.
+  // Ground charge buildup (opposite image charges + near-ground retention).
   for (let x = 0; x < chargeGridW; x++) {
     const bottom = chargeGridIndex(x, 0);
     const low = chargeGridIndex(x, 1);
-    chargeGridNegative[bottom] = Math.min(chargeGridNegative[bottom] + chargeGridPositive[low] * 0.08, 6.0);
+    chargeGridPositive[bottom] = Math.min(chargeGridPositive[bottom] + chargeGridNegative[low] * 0.055, 6.0);
+    chargeGridNegative[bottom] = Math.min(chargeGridNegative[bottom] + chargeGridPositive[low] * 0.055, 6.0);
   }
 
   if (currentIter - chargeLinksLastStrikeIter < 10 || currentIter < chargeSystemWarmupUntilIter)
@@ -2033,10 +2039,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         this.curZoom = this.tarZoom = zoom;
     }
 
-    triggerShake(intensity)
+    triggerShake(intensity, randomOffsetScale = 1.0)
     {
       const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.0), 0.0, 4.0, 0.0015, 0.018);
       this.#shakeAmplitude = Math.max(this.#shakeAmplitude, baseAmplitude);
+      this.#shakeOffsetX += (Math.random() * 2.0 - 1.0) * baseAmplitude * randomOffsetScale;
+      this.#shakeOffsetY += (Math.random() * 2.0 - 1.0) * baseAmplitude * sim_aspect * randomOffsetScale;
       this.#shakeJitterFrames = 0;
     }
 
@@ -4781,11 +4789,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       const updraft = Math.max(baseSample[1], 0.0);
       const cloudDensity = Math.max(waterSample[1], 0.0);
-      const denseCloud = cloudDensity > 0.30;
-      const strongUpdraft = updraft > 0.0045;
+      const denseCloud = cloudDensity > 0.22;
       const coldEnough = potentialToRealT(baseSample[3], simY) < CtoK(-2.0);
 
-      if (denseCloud && strongUpdraft && coldEnough) {
+      if (denseCloud && coldEnough) {
         sources.push({
           x : simX / sim_res_x,
           y : normY,
@@ -6641,7 +6648,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, chargeStrike.chargeContrast);
                 const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
                 const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
-                cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor);
+                const shakeRandomOffset = 0.7 + Math.random() * 0.9;
+                cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor * 2.0, shakeRandomOffset);
                 updateSimulationHud();
                 if (guiControls.sound) {
                   soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
