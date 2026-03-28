@@ -342,6 +342,8 @@ var chargeGridNegative = null;
 var chargeCellActivation = null;
 var chargeGridW = 96;
 var chargeGridH = 72;
+var chargeGroundNet = null;
+var chargeGridVerticalFlow = null;
 var chargeLinksLastStrikeIter = -1000;
 var chargeSystemWarmupUntilIter = 320;
 var cachedChargeSources = [];
@@ -378,8 +380,8 @@ const displayModeLabels = {
 const loadingTips = [
   'Tip: higher horizontal resolution encourages broader converging flow and larger storm structures.',
   'Tip: realistic mode plus wind vectors is useful for inspecting storm organization while editing terrain.',
-  'Tip: lightning now builds from charge separation inside dense, cold updraft clouds instead of instant random triggers.',
-  'Tip: charge buildup takes time, then can link cloud-to-cloud or cloud-to-ground once enough separation develops.',
+  'Tip: lightning now follows +/− charge physics: graupel/ice separation in dense storm cores builds electric potential over time.',
+  'Tip: strong updrafts lift positive charge while negative charge settles lower, and induced ground charge can complete cloud-to-ground links.',
   'Tip: use the built-in randomize controls in the main UI folders for fast time, brush, and display experiments.'
 ];
 
@@ -590,43 +592,62 @@ function initChargeSeparationGrid()
   chargeGridPositive = new Float32Array(size);
   chargeGridNegative = new Float32Array(size);
   chargeCellActivation = new Uint16Array(size);
+  chargeGroundNet = new Float32Array(chargeGridW);
+  chargeGridVerticalFlow = new Float32Array(size);
 }
 
 function chargeGridIndex(x, y) { return y * chargeGridW + x; }
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation)
+  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow)
     initChargeSeparationGrid();
 
   const size = chargeGridW * chargeGridH;
+  const chargeCap = 7.0;
+  const iterFactor = Math.max(0.4, Math.min(iterScale, 3.5));
 
   for (let i = 0; i < size; i++) {
-    chargeGridPositive[i] *= 0.992;
-    chargeGridNegative[i] *= 0.992;
+    chargeGridPositive[i] *= 0.989;
+    chargeGridNegative[i] *= 0.989;
+    chargeGridVerticalFlow[i] *= 0.90;
     if (chargeCellActivation[i] > 0)
       chargeCellActivation[i] -= 1;
   }
 
+  for (let x = 0; x < chargeGridW; x++)
+    chargeGroundNet[x] *= 0.987;
+
   if (chargeSources && chargeSources.length > 0) {
     for (let i = 0; i < chargeSources.length; i++) {
       const source = chargeSources[i];
-      const x = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
-      const y = clamp(Math.floor(source.y * chargeGridH), 1, chargeGridH - 2);
-      const upperIdx = chargeGridIndex(x, clamp(y + 1, 1, chargeGridH - 1));
-      const lowerIdx = chargeGridIndex(x, clamp(y - 1, 0, chargeGridH - 2));
-      const centerIdx = chargeGridIndex(x, y);
-      const injection = source.cloudDensity * (0.17 + iterScale * 0.012);
-      const updraftAssist = clamp(source.updraft * 60.0, 0.0, 0.32);
-      chargeGridPositive[upperIdx] = Math.min(chargeGridPositive[upperIdx] + injection * (0.62 + updraftAssist), 6.0);
-      chargeGridNegative[lowerIdx] = Math.min(chargeGridNegative[lowerIdx] + injection * (0.62 + (1.0 - updraftAssist) * 0.2), 6.0);
-      chargeGridPositive[centerIdx] = Math.min(chargeGridPositive[centerIdx] + injection * 0.16, 6.0);
-      chargeGridNegative[centerIdx] = Math.min(chargeGridNegative[centerIdx] + injection * 0.16, 6.0);
-      chargeCellActivation[centerIdx] = Math.min(chargeCellActivation[centerIdx] + 5, 65535);
+      const gx = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
+      const gy = clamp(Math.floor(source.y * chargeGridH), 2, chargeGridH - 3);
+      const density = clamp(source.cloudDensity, 0.0, 1.8);
+      const updraft = clamp(source.updraft * 95.0, 0.0, 1.0);
+      const mixedPhase = clamp(source.mixedPhase, 0.0, 1.0);
+      const injection = (0.05 + density * 0.25) * (0.55 + mixedPhase * 0.9) * iterFactor;
+
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = (gx + dx + chargeGridW) % chargeGridW;
+        const falloff = dx === 0 ? 1.0 : 0.58;
+        const upperIdx = chargeGridIndex(x, clamp(gy + 1, 0, chargeGridH - 1));
+        const centerIdx = chargeGridIndex(x, gy);
+        const lowerIdx = chargeGridIndex(x, clamp(gy - 1, 0, chargeGridH - 1));
+
+        const liftedPositive = injection * (0.66 + updraft * 0.45) * falloff;
+        const settledNegative = injection * (0.63 + (1.0 - updraft) * 0.42) * falloff;
+
+        chargeGridPositive[upperIdx] = Math.min(chargeGridPositive[upperIdx] + liftedPositive, chargeCap);
+        chargeGridNegative[lowerIdx] = Math.min(chargeGridNegative[lowerIdx] + settledNegative, chargeCap);
+        chargeGridPositive[centerIdx] = Math.min(chargeGridPositive[centerIdx] + liftedPositive * 0.18, chargeCap);
+        chargeGridNegative[centerIdx] = Math.min(chargeGridNegative[centerIdx] + settledNegative * 0.18, chargeCap);
+        chargeGridVerticalFlow[centerIdx] += (updraft - 0.33) * 0.03;
+        chargeCellActivation[centerIdx] = Math.min(chargeCellActivation[centerIdx] + 9, 65535);
+      }
     }
   }
 
-  // Separate charges vertically (positive aloft, negative lower), with diffusion.
   for (let y = 1; y < chargeGridH - 1; y++) {
     for (let x = 0; x < chargeGridW; x++) {
       const idx = chargeGridIndex(x, y);
@@ -635,26 +656,34 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const leftIdx = chargeGridIndex((x - 1 + chargeGridW) % chargeGridW, y);
       const rightIdx = chargeGridIndex((x + 1) % chargeGridW, y);
 
-      const pTransfer = chargeGridPositive[idx] * 0.036;
-      const nTransfer = chargeGridNegative[idx] * 0.034;
-      chargeGridPositive[idx] -= pTransfer;
-      chargeGridPositive[upIdx] = Math.min(chargeGridPositive[upIdx] + pTransfer * 0.78, 6.0);
-      chargeGridPositive[leftIdx] = Math.min(chargeGridPositive[leftIdx] + pTransfer * 0.11, 6.0);
-      chargeGridPositive[rightIdx] = Math.min(chargeGridPositive[rightIdx] + pTransfer * 0.11, 6.0);
+      const localField = chargeGridPositive[idx] - chargeGridNegative[idx] + chargeGridVerticalFlow[idx];
+      const pDrift = Math.max(0.0, 0.012 + localField * 0.004);
+      const nDrift = Math.max(0.0, 0.012 - localField * 0.004);
+      const pTransfer = Math.min(chargeGridPositive[idx] * pDrift, chargeGridPositive[idx]);
+      const nTransfer = Math.min(chargeGridNegative[idx] * nDrift, chargeGridNegative[idx]);
 
+      chargeGridPositive[idx] -= pTransfer;
       chargeGridNegative[idx] -= nTransfer;
-      chargeGridNegative[downIdx] = Math.min(chargeGridNegative[downIdx] + nTransfer * 0.78, 6.0);
-      chargeGridNegative[leftIdx] = Math.min(chargeGridNegative[leftIdx] + nTransfer * 0.11, 6.0);
-      chargeGridNegative[rightIdx] = Math.min(chargeGridNegative[rightIdx] + nTransfer * 0.11, 6.0);
+
+      chargeGridPositive[upIdx] = Math.min(chargeGridPositive[upIdx] + pTransfer * 0.74, chargeCap);
+      chargeGridPositive[leftIdx] = Math.min(chargeGridPositive[leftIdx] + pTransfer * 0.13, chargeCap);
+      chargeGridPositive[rightIdx] = Math.min(chargeGridPositive[rightIdx] + pTransfer * 0.13, chargeCap);
+
+      chargeGridNegative[downIdx] = Math.min(chargeGridNegative[downIdx] + nTransfer * 0.74, chargeCap);
+      chargeGridNegative[leftIdx] = Math.min(chargeGridNegative[leftIdx] + nTransfer * 0.13, chargeCap);
+      chargeGridNegative[rightIdx] = Math.min(chargeGridNegative[rightIdx] + nTransfer * 0.13, chargeCap);
+
+      const recombine = Math.min(chargeGridPositive[idx], chargeGridNegative[idx]) * 0.045;
+      chargeGridPositive[idx] -= recombine;
+      chargeGridNegative[idx] -= recombine;
     }
   }
 
-  // Ground charge buildup (opposite image charges + near-ground retention).
   for (let x = 0; x < chargeGridW; x++) {
-    const bottom = chargeGridIndex(x, 0);
-    const low = chargeGridIndex(x, 1);
-    chargeGridPositive[bottom] = Math.min(chargeGridPositive[bottom] + chargeGridNegative[low] * 0.055, 6.0);
-    chargeGridNegative[bottom] = Math.min(chargeGridNegative[bottom] + chargeGridPositive[low] * 0.055, 6.0);
+    const lowIdx = chargeGridIndex(x, 1);
+    const lowerCloudNet = chargeGridPositive[lowIdx] - chargeGridNegative[lowIdx];
+    chargeGroundNet[x] += clamp(-lowerCloudNet * 0.07, -0.22, 0.22);
+    chargeGroundNet[x] = clamp(chargeGroundNet[x], -5.0, 5.0);
   }
 
   if (currentIter - chargeLinksLastStrikeIter < 10 || currentIter < chargeSystemWarmupUntilIter)
@@ -662,42 +691,52 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
   let best = null;
   let bestScore = 0.0;
-  for (let y = 2; y < chargeGridH - 1; y++) {
+
+  for (let y = 3; y < chargeGridH - 2; y++) {
     for (let x = 0; x < chargeGridW; x++) {
       const idx = chargeGridIndex(x, y);
-      const p = chargeGridPositive[idx];
-      const nBelow = chargeGridNegative[chargeGridIndex(x, y - 1)];
-      const nGround = chargeGridNegative[chargeGridIndex(x, 0)];
-      const localPotential = p - nBelow;
       const activation = chargeCellActivation[idx];
-
-      if (activation < 16 || p < 0.25)
+      if (activation < 12)
         continue;
 
-      const ccScore = localPotential * 0.9 + (p + nBelow) * 0.2;
-      if (nBelow > 0.18 && ccScore > bestScore) {
+      const p = chargeGridPositive[idx];
+      const nBelow = chargeGridNegative[chargeGridIndex(x, y - 1)];
+      if (p < 0.22 || nBelow < 0.18)
+        continue;
+
+      const chargeContrast = p + nBelow;
+      const fieldStrength = Math.abs(p - nBelow) + chargeContrast * 0.72;
+      const maturity = Math.min(activation / 100.0, 1.0);
+      const ccScore = fieldStrength * (0.62 + maturity * 0.65);
+      if (ccScore > bestScore) {
         bestScore = ccScore;
-        best = {x, y, contrast : p + nBelow, cloudToGround : false};
+        best = {x, y, contrast : chargeContrast, cloudToGround : false};
       }
 
-      const cgScore = (p + nGround) * (1.0 - y / chargeGridH) * 1.35;
-      if (nGround > 0.22 && cgScore > bestScore) {
+      const groundOpposition = Math.max(0.0, -chargeGroundNet[x]);
+      const altitudeFactor = 1.0 - y / chargeGridH;
+      const cgScore = (p + groundOpposition * 1.2) * altitudeFactor * (0.9 + maturity * 0.5);
+      if (groundOpposition > 0.16 && cgScore > bestScore) {
         bestScore = cgScore;
-        best = {x, y, contrast : p + nGround, cloudToGround : true};
+        best = {x, y, contrast : p + groundOpposition, cloudToGround : true};
       }
     }
   }
 
-  if (!best || bestScore < 0.46)
+  if (!best || bestScore < 0.55)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
   const strikeX = (best.x + 0.5) / chargeGridW;
   const strikeY = (best.y + 0.5) / chargeGridH;
-  const strikeIntensity = clamp(0.40 + best.contrast * (best.cloudToGround ? 1.25 : 0.95), 0.40, 4.0);
+  const strikeIntensity = clamp(0.42 + best.contrast * (best.cloudToGround ? 1.18 : 0.9), 0.42, 4.2);
+
   const srcIdx = chargeGridIndex(best.x, best.y);
-  chargeGridPositive[srcIdx] *= 0.35;
-  chargeGridNegative[srcIdx] *= 0.40;
+  const belowIdx = chargeGridIndex(best.x, Math.max(best.y - 1, 0));
+  chargeGridPositive[srcIdx] *= 0.28;
+  chargeGridNegative[srcIdx] *= 0.34;
+  chargeGridNegative[belowIdx] *= 0.45;
+  chargeGroundNet[best.x] *= 0.45;
   chargeCellActivation[srcIdx] = 0;
 
   return {
@@ -4770,13 +4809,13 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function collectChargeSources(currentIter, sampleColumns = 18)
   {
-    if (currentIter - lastChargeSourceScanIter < 4)
+    if (currentIter - lastChargeSourceScanIter < 3)
       return cachedChargeSources;
 
     const sources = [];
-    const yStart = Math.floor(sim_res_y * 0.15);
-    const yEnd = Math.floor(sim_res_y * 0.96);
-    const rotation = Math.floor(currentIter * 0.73) % sim_res_x;
+    const yStart = Math.floor(sim_res_y * 0.12);
+    const yEnd = Math.floor(sim_res_y * 0.97);
+    const rotation = Math.floor(currentIter * 0.91) % sim_res_x;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
 
     for (let col = 0; col < sampleColumns; col++) {
@@ -4789,30 +4828,41 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, waterColumn);
 
-      let candidatesAdded = 0;
-      for (let simY = yStart; simY < yEnd && candidatesAdded < 3; simY++) {
+      let activeLayers = 0;
+      for (let simY = yStart; simY < yEnd; simY++) {
         const idx = simY * 4;
         const potentialT = baseColumn[idx + 3];
         const totalWater = waterColumn[idx + 0];
         const cloudDensity = Math.max(waterColumn[idx + 1], 0.0);
 
-        if (potentialT >= 500.0 || totalWater > 1000.0 || cloudDensity <= 0.22)
+        if (potentialT >= 500.0 || totalWater > 1000.0 || cloudDensity < 0.18)
           continue;
 
         const tempK = potentialToRealT(potentialT, simY);
-        if (tempK > CtoK(-2.0))
+        const updraft = Math.max(baseColumn[idx + 1], 0.0);
+
+        if (tempK > CtoK(4.0) || updraft < 0.0018)
           continue;
 
-        const updraft = Math.max(baseColumn[idx + 1], 0.0);
+        const supercooled = clamp((CtoK(0.0) - tempK) / 15.0, 0.0, 1.0);
+        const mixedPhase = clamp((cloudDensity - 0.16) * 1.8, 0.0, 1.0) * (0.45 + supercooled * 0.55);
+        if (mixedPhase < 0.2)
+          continue;
+
         const normY = simY / sim_res_y;
+        const hotspotBias = clamp((updraft - 0.002) * 210.0, 0.0, 1.0);
         sources.push({
           x : simX / sim_res_x,
           y : normY,
           updraft,
-          cloudDensity,
-          tag : (simX * 4099 + simY * 131) * 0.00001
+          cloudDensity : cloudDensity * (0.65 + hotspotBias * 0.55),
+          mixedPhase,
+          tag : (simX * 8191 + simY * 313) * 0.000001
         });
-        candidatesAdded++;
+        activeLayers++;
+
+        if (activeLayers >= 4)
+          break;
       }
     }
 
@@ -4820,6 +4870,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     lastChargeSourceScanIter = currentIter;
     return cachedChargeSources;
   }
+
 
   function logSample()
   {
