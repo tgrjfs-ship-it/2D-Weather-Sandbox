@@ -339,6 +339,7 @@ var latestLightningPos = null;
 var simStepRequested = false;
 var chargeParticles = [];
 var groundCharges = [];
+var chargeReservoirs = new Map();
 var chargeLinksLastStrikeIter = -1000;
 var chargeSystemWarmupUntilIter = 320;
 
@@ -620,14 +621,35 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   if (groundCharges.length == 0)
     seedGroundCharges();
 
+  const activeSourceKeys = new Set();
   if (chargeSources && chargeSources.length > 0) {
-    const spawnCap = Math.min(Math.max(1, Math.round(iterScale * 1.6)), chargeSources.length);
-    for (let i = 0; i < spawnCap && chargeParticles.length < 320; i++) {
+    for (let i = 0; i < chargeSources.length && chargeParticles.length < 320; i++) {
       const source = chargeSources[i];
-      const sourceEnergy = source.cloudDensity * 0.55 + source.updraft * 210.0;
-      const spawnChance = clamp(sourceEnergy * 0.23, 0.0, 0.9);
-      if (Math.random() < spawnChance)
+      const keyX = Math.floor(source.x * 32.0);
+      const keyY = Math.floor(source.y * 32.0);
+      const key = keyX + ':' + keyY;
+      activeSourceKeys.add(key);
+
+      const sourceEnergy = Math.max(source.cloudDensity * 0.52 + source.updraft * 250.0, 0.0);
+      const prevReservoir = chargeReservoirs.get(key) || 0.0;
+      const nextReservoir = Math.min(prevReservoir + sourceEnergy * (0.16 + iterScale * 0.01), 6.0);
+      chargeReservoirs.set(key, nextReservoir);
+
+      if (nextReservoir >= 1.0) {
         spawnChargeParticle(source, currentIter * 0.01 + i * 0.7);
+        chargeReservoirs.set(key, nextReservoir - 1.0);
+      }
+    }
+  }
+
+  if (chargeReservoirs.size > 0) {
+    for (const [ key, value ] of chargeReservoirs.entries()) {
+      const passiveDecay = activeSourceKeys.has(key) ? 0.996 : 0.965;
+      const nextValue = value * passiveDecay;
+      if (nextValue < 0.03)
+        chargeReservoirs.delete(key);
+      else
+        chargeReservoirs.set(key, nextValue);
     }
   }
 
