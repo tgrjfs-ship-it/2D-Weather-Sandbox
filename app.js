@@ -351,7 +351,6 @@ var chargeParticlesNegative = [];
 var chargeLinkChains = [];
 var chargeRenderOverlay = null;
 var chargeTerrainNormY = null;
-var lastChargeTerrainScanIter = -1000;
 var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
 
@@ -589,37 +588,8 @@ function ensureChargeOverlayCanvas()
   return chargeRenderOverlay;
 }
 
-function refreshChargeTerrainProfile(currentIter)
-{
-  if (!chargeTerrainNormY)
-    chargeTerrainNormY = new Float32Array(chargeGridW);
-
-  if (currentIter - lastChargeTerrainScanIter < 12)
-    return;
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
-  for (let x = 0; x < chargeGridW; x++) {
-    const simX = clamp(Math.floor(((x + 0.5) / chargeGridW) * sim_res_x), 0, sim_res_x - 1);
-    const wallColumn = new Int8Array(sim_res_y * 4);
-    gl.readBuffer(gl.COLOR_ATTACHMENT2);
-    gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA_INTEGER, gl.BYTE, wallColumn);
-
-    let surfaceY = 0;
-    for (let y = 0; y < sim_res_y; y++) {
-      if (wallColumn[y * 4 + 2] == 0) {
-        surfaceY = y;
-        break;
-      }
-    }
-    chargeTerrainNormY[x] = clamp((surfaceY + 1) / sim_res_y, 0.0, 0.98);
-  }
-
-  lastChargeTerrainScanIter = currentIter;
-}
-
 function updateChargeParticlesFromGrid(currentIter)
 {
-  refreshChargeTerrainProfile(currentIter);
   const targetCount = 44;
 
   function spawnParticles(sign)
@@ -5051,6 +5021,20 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, baseColumn);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, waterColumn);
+
+      const wallColumn = new Int8Array(sim_res_y * 4);
+      gl.readBuffer(gl.COLOR_ATTACHMENT2);
+      gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA_INTEGER, gl.BYTE, wallColumn);
+      let surfaceY = 0;
+      for (let y = 0; y < sim_res_y; y++) {
+        if (wallColumn[y * 4 + 2] == 0) {
+          surfaceY = y;
+          break;
+        }
+      }
+      const gridX = clamp(Math.floor((simX / sim_res_x) * chargeGridW), 0, chargeGridW - 1);
+      if (chargeTerrainNormY)
+        chargeTerrainNormY[gridX] = clamp((surfaceY + 1) / sim_res_y, 0.0, 0.98);
 
       let activeLayers = 0;
       for (let simY = yStart; simY < yEnd; simY++) {
