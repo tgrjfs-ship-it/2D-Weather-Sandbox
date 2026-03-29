@@ -355,6 +355,8 @@ var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
 var lightningEvaporationPulse = 0.0;
 var chargeHydrometeorCoupling = 0.0;
+var chargeGridWindX = null;
+var chargeGridWindY = null;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -561,6 +563,8 @@ function initChargeSeparationGrid()
   chargeCellActivation = new Uint16Array(size);
   chargeGroundNet = new Float32Array(chargeGridW);
   chargeGridVerticalFlow = new Float32Array(size);
+  chargeGridWindX = new Float32Array(size);
+  chargeGridWindY = new Float32Array(size);
   chargeTerrainNormY = new Float32Array(chargeGridW);
   chargeTerrainNormY.fill(0.01);
 }
@@ -609,8 +613,8 @@ function updateChargeParticlesFromGrid(currentIter)
       sign.list.push({
         x : (x + Math.random()) / chargeGridW,
         y : (y + Math.random()) / chargeGridH,
-        vx : (Math.random() - 0.5) * 0.0007,
-        vy : (Math.random() - 0.5) * 0.0004,
+        vx : 0.0,
+        vy : 0.0,
         age : 0,
         charge : sign.symbol,
         strength : magnitude,
@@ -629,14 +633,13 @@ function updateChargeParticlesFromGrid(currentIter)
     const idx = chargeGridIndex(gx, gy);
     const pLocal = chargeGridPositive[idx];
     const nLocal = chargeGridNegative[idx];
-    const verticalBias = polarity > 0 ? 0.00022 : -0.00020;
-    const fieldBias = (pLocal - nLocal) * 0.00006 * polarity;
+    const windX = chargeGridWindX ? chargeGridWindX[idx] : 0.0;
+    const windY = chargeGridWindY ? chargeGridWindY[idx] : 0.0;
+    const chargeDrift = (pLocal - nLocal) * 0.00005 * polarity;
 
-    p.vx += (Math.random() - 0.5) * 0.00022;
-    p.vy += verticalBias + fieldBias;
-    p.vx *= 0.94;
-    p.vy *= 0.92;
-    p.x = mod(p.x + p.vx + 1.0, 1.0);
+    p.vx = p.vx * 0.86 + windX * 0.055;
+    p.vy = p.vy * 0.86 + windY * 0.045 + chargeDrift;
+    p.x = mod(p.x + p.vx, 1.0);
     const terrainFloor = chargeTerrainNormY ? chargeTerrainNormY[gx] + 0.008 : 0.02;
     p.y = clamp(p.y + p.vy, terrainFloor, 0.98);
     p.strength = Math.max(0.08, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
@@ -659,45 +662,59 @@ function updateChargeParticlesFromGrid(currentIter)
   }
 }
 
+
 function buildChargeLinkChains()
 {
   chargeLinkChains = [];
-  const maxLinks = 3;
-  const linkRadius = 0.072;
+  const linkRadius = 0.08;
 
   for (let i = 0; i < chargeParticlesPositive.length; i++) {
-    const pos = chargeParticlesPositive[i];
-    if (pos.age < pos.matureAfter)
+    const seed = chargeParticlesPositive[i];
+    if (seed.age < seed.matureAfter)
       continue;
 
-    const links = [];
-    for (let j = 0; j < chargeParticlesNegative.length; j++) {
-      const neg = chargeParticlesNegative[j];
-      if (neg.age < neg.matureAfter)
-        continue;
-      const dx = Math.abs(pos.x - neg.x);
-      const wrappedDx = Math.min(dx, 1.0 - dx);
-      const dy = pos.y - neg.y;
-      const dist = Math.sqrt(wrappedDx * wrappedDx + dy * dy);
-      if (dist > linkRadius)
-        continue;
-      links.push({
-        target : neg,
-        distance : dist,
-        contrast : pos.strength + neg.strength
-      });
+    const nodes = [ seed ];
+    let contrast = seed.strength;
+    let expectPositive = false;
+
+    for (let hop = 0; hop < 5; hop++) {
+      const source = nodes[nodes.length - 1];
+      const pool = expectPositive ? chargeParticlesPositive : chargeParticlesNegative;
+      let nearest = null;
+      let nearestDist = 99.0;
+
+      for (let j = 0; j < pool.length; j++) {
+        const cand = pool[j];
+        if (cand.age < cand.matureAfter || nodes.includes(cand))
+          continue;
+        const dx = Math.abs(source.x - cand.x);
+        const wrappedDx = Math.min(dx, 1.0 - dx);
+        const dy = source.y - cand.y;
+        const dist = Math.sqrt(wrappedDx * wrappedDx + dy * dy);
+        if (dist < nearestDist && dist <= linkRadius) {
+          nearestDist = dist;
+          nearest = cand;
+        }
+      }
+
+      if (!nearest)
+        break;
+
+      nodes.push(nearest);
+      contrast += nearest.strength;
+      expectPositive = !expectPositive;
     }
 
-    if (links.length == 0)
+    if (nodes.length < 3)
       continue;
 
-    links.sort((a, b) => a.distance - b.distance);
     chargeLinkChains.push({
-      positive : pos,
-      links : links.slice(0, maxLinks)
+      nodes,
+      contrast : contrast / nodes.length
     });
   }
 }
+
 
 function renderChargeOverlay()
 {
@@ -741,9 +758,9 @@ function renderChargeOverlay()
   ctx.strokeStyle = 'rgba(255,240,180,0.25)';
   for (let i = 0; i < chargeLinkChains.length; i++) {
     const chain = chargeLinkChains[i];
-    const p0 = toScreen(chain.positive.x, chain.positive.y);
-    for (let j = 0; j < chain.links.length; j++) {
-      const p1 = toScreen(chain.links[j].target.x, chain.links[j].target.y);
+    for (let j = 0; j < chain.nodes.length - 1; j++) {
+      const p0 = toScreen(chain.nodes[j].x, chain.nodes[j].y);
+      const p1 = toScreen(chain.nodes[j + 1].x, chain.nodes[j + 1].y);
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
@@ -754,7 +771,7 @@ function renderChargeOverlay()
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow)
+  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY)
     initChargeSeparationGrid();
 
   const size = chargeGridW * chargeGridH;
@@ -784,7 +801,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const precipitationLoading = clamp(source.precipitationLoading || 0.0, 0.0, 1.0);
       const iceMix = clamp(source.iceMix || 0.0, 0.0, 1.0);
       hydroAccumulator += precipitationLoading * 0.6 + iceMix * 0.4;
-      const hydroBoost = 1.0 + precipitationLoading * 0.35 + iceMix * 0.24;
+      const hydroBoost = 1.0 + (precipitationLoading * 0.35 + iceMix * 0.24) * guiControls.precipitationChargeCoupling;
       const injection = (0.05 + density * 0.25) * (0.55 + mixedPhase * 0.9) * iterFactor * hydroBoost;
 
       for (let dx = -1; dx <= 1; dx++) {
@@ -808,6 +825,18 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     chargeHydrometeorCoupling = hydroAccumulator / Math.max(chargeSources.length, 1);
   } else {
     chargeHydrometeorCoupling *= 0.95;
+  }
+
+  for (let y = 1; y < chargeGridH - 1; y++) {
+    for (let x = 0; x < chargeGridW; x++) {
+      const idx = chargeGridIndex(x, y);
+      const shear = Math.abs(chargeGridWindY[idx]) + Math.abs(chargeGridWindX[idx]) * 0.6;
+      if (shear > 0.015) {
+        const ambient = Math.min((shear - 0.015) * 1.8, 0.03);
+        chargeGridPositive[idx] = Math.min(chargeGridPositive[idx] + ambient * 0.55, chargeCap);
+        chargeGridNegative[idx] = Math.min(chargeGridNegative[idx] + ambient * 0.45, chargeCap);
+      }
+    }
   }
 
   for (let y = 1; y < chargeGridH - 1; y++) {
@@ -859,27 +888,23 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
   for (let i = 0; i < chargeLinkChains.length; i++) {
     const chain = chargeLinkChains[i];
-    const p = chain.positive;
-
-    for (let j = 0; j < chain.links.length; j++) {
-      const link = chain.links[j];
-      const neg = link.target;
-      const centerY = (p.y + neg.y) * 0.5;
-      const centerX = mod((p.x + neg.x) * 0.5 + 1.0, 1.0);
-      const contrast = link.contrast;
-      const maturity = Math.min((p.age + neg.age) / 150.0, 1.0);
-      const score = contrast * (1.0 + maturity + chargeHydrometeorCoupling * 0.25) * (1.08 - Math.min(link.distance / 0.08, 0.82));
-      if (score > bestScore) {
-        bestScore = score;
-        best = {
-          x : centerX,
-          y : centerY,
-          contrast,
-          cloudToGround : false,
-          sourceParticle : p,
-          targetParticle : neg
-        };
-      }
+    const head = chain.nodes[0];
+    const tail = chain.nodes[chain.nodes.length - 1];
+    const centerY = (head.y + tail.y) * 0.5;
+    const centerX = mod((head.x + tail.x) * 0.5 + 1.0, 1.0);
+    const maturity = Math.min((head.age + tail.age) / 150.0, 1.0);
+    const chainLengthBoost = 1.0 + (chain.nodes.length - 2) * 0.16;
+    const score = chain.contrast * chainLengthBoost * (1.0 + maturity + chargeHydrometeorCoupling * 0.25);
+    if (score > bestScore) {
+      bestScore = score;
+      best = {
+        x : centerX,
+        y : centerY,
+        contrast : chain.contrast * chainLengthBoost,
+        cloudToGround : false,
+        sourceParticle : head,
+        targetParticle : tail
+      };
     }
   }
 
@@ -5048,6 +5073,16 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       const gridX = clamp(Math.floor((simX / sim_res_x) * chargeGridW), 0, chargeGridW - 1);
       if (chargeTerrainNormY)
         chargeTerrainNormY[gridX] = clamp((surfaceY + 1) / sim_res_y, 0.0, 0.98);
+
+      for (let simY = yStart; simY < yEnd; simY++) {
+        const idx = simY * 4;
+        const gridY = clamp(Math.floor((simY / sim_res_y) * chargeGridH), 0, chargeGridH - 1);
+        const gridIdx = chargeGridIndex(gridX, gridY);
+        if (chargeGridWindX && chargeGridWindY) {
+          chargeGridWindX[gridIdx] = baseColumn[idx + 0];
+          chargeGridWindY[gridIdx] = baseColumn[idx + 1];
+        }
+      }
 
       let activeLayers = 0;
       for (let simY = yStart; simY < yEnd; simY++) {
