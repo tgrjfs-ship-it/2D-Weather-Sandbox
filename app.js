@@ -346,6 +346,10 @@ var chargeGroundNet = null;
 var chargeGridVerticalFlow = null;
 var chargeLinksLastStrikeIter = -1000;
 var chargeSystemWarmupUntilIter = 320;
+var chargeParticlesPositive = [];
+var chargeParticlesNegative = [];
+var chargeLinkChains = [];
+var chargeRenderOverlay = null;
 var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
 
@@ -598,6 +602,190 @@ function initChargeSeparationGrid()
 
 function chargeGridIndex(x, y) { return y * chargeGridW + x; }
 
+function ensureChargeOverlayCanvas()
+{
+  if (chargeRenderOverlay)
+    return chargeRenderOverlay;
+
+  const overlayCanvas = document.createElement('canvas');
+  overlayCanvas.id = 'chargeOverlayCanvas';
+  overlayCanvas.style.position = 'fixed';
+  overlayCanvas.style.left = '0';
+  overlayCanvas.style.top = '0';
+  overlayCanvas.style.pointerEvents = 'none';
+  overlayCanvas.style.zIndex = '3';
+  overlayCanvas.width = window.innerWidth;
+  overlayCanvas.height = window.innerHeight;
+  document.body.appendChild(overlayCanvas);
+
+  chargeRenderOverlay = {
+    canvas : overlayCanvas,
+    ctx : overlayCanvas.getContext('2d')
+  };
+  return chargeRenderOverlay;
+}
+
+function updateChargeParticlesFromGrid(currentIter)
+{
+  const targetCount = 44;
+
+  function spawnParticles(sign)
+  {
+    let safety = 0;
+    while (sign.list.length < targetCount && safety < 260) {
+      safety++;
+      const x = Math.floor(Math.random() * chargeGridW);
+      const y = Math.floor(Math.random() * (chargeGridH - 2)) + 1;
+      const idx = chargeGridIndex(x, y);
+      const magnitude = sign.grid[idx];
+      if (magnitude < 0.20)
+        continue;
+
+      sign.list.push({
+        x : (x + Math.random()) / chargeGridW,
+        y : (y + Math.random()) / chargeGridH,
+        vx : (Math.random() - 0.5) * 0.0007,
+        vy : (Math.random() - 0.5) * 0.0004,
+        age : 0,
+        charge : sign.symbol,
+        strength : magnitude,
+        matureAfter : 18 + Math.floor(Math.random() * 30),
+        column : x
+      });
+    }
+  }
+
+  spawnParticles({list : chargeParticlesPositive, grid : chargeGridPositive, symbol : '+'});
+  spawnParticles({list : chargeParticlesNegative, grid : chargeGridNegative, symbol : '-'});
+
+  const advanceParticle = (p, polarity) => {
+    const gx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
+    const gy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
+    const idx = chargeGridIndex(gx, gy);
+    const pLocal = chargeGridPositive[idx];
+    const nLocal = chargeGridNegative[idx];
+    const verticalBias = polarity > 0 ? 0.00022 : -0.00020;
+    const fieldBias = (pLocal - nLocal) * 0.00006 * polarity;
+
+    p.vx += (Math.random() - 0.5) * 0.00022;
+    p.vy += verticalBias + fieldBias;
+    p.vx *= 0.94;
+    p.vy *= 0.92;
+    p.x = mod(p.x + p.vx + 1.0, 1.0);
+    p.y = clamp(p.y + p.vy, 0.02, 0.98);
+    p.strength = Math.max(0.08, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
+    p.column = gx;
+    p.age += 1;
+  };
+
+  for (let i = chargeParticlesPositive.length - 1; i >= 0; i--) {
+    const p = chargeParticlesPositive[i];
+    advanceParticle(p, 1.0);
+    if (p.age > 180 || p.strength < 0.09)
+      chargeParticlesPositive.splice(i, 1);
+  }
+
+  for (let i = chargeParticlesNegative.length - 1; i >= 0; i--) {
+    const p = chargeParticlesNegative[i];
+    advanceParticle(p, -1.0);
+    if (p.age > 180 || p.strength < 0.09)
+      chargeParticlesNegative.splice(i, 1);
+  }
+}
+
+function buildChargeLinkChains()
+{
+  chargeLinkChains = [];
+  const maxLinks = 3;
+  const linkRadius = 0.072;
+
+  for (let i = 0; i < chargeParticlesPositive.length; i++) {
+    const pos = chargeParticlesPositive[i];
+    if (pos.age < pos.matureAfter)
+      continue;
+
+    const links = [];
+    for (let j = 0; j < chargeParticlesNegative.length; j++) {
+      const neg = chargeParticlesNegative[j];
+      if (neg.age < neg.matureAfter)
+        continue;
+      const dx = Math.abs(pos.x - neg.x);
+      const wrappedDx = Math.min(dx, 1.0 - dx);
+      const dy = pos.y - neg.y;
+      const dist = Math.sqrt(wrappedDx * wrappedDx + dy * dy);
+      if (dist > linkRadius)
+        continue;
+      links.push({
+        target : neg,
+        distance : dist,
+        contrast : pos.strength + neg.strength
+      });
+    }
+
+    if (links.length == 0)
+      continue;
+
+    links.sort((a, b) => a.distance - b.distance);
+    chargeLinkChains.push({
+      positive : pos,
+      links : links.slice(0, maxLinks)
+    });
+  }
+}
+
+function renderChargeOverlay()
+{
+  const overlay = ensureChargeOverlayCanvas();
+  if (!overlay || !overlay.ctx)
+    return;
+
+  const ctx = overlay.ctx;
+  const w = overlay.canvas.width;
+  const h = overlay.canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const viewX = cam.renderXpos;
+  const viewY = cam.renderYpos;
+  const zoom = cam.curZoom;
+  const aspect = sim_res_y / sim_res_x;
+
+  const toScreen = (x, y) => {
+    const wx = (-x * 2.0 + 1.0) * horizontalDisplayMult;
+    const wy = -y * 2.0 * aspect + aspect;
+    return {
+      x : ((wx + viewX) * zoom + 1.0) * 0.5 * w,
+      y : (1.0 - ((wy + viewY) * zoom + 1.0) * 0.5) * h
+    };
+  };
+
+  const drawParticle = (p, color) => {
+    const pt = toScreen(p.x, p.y);
+    if (pt.x < -10 || pt.x > w + 10 || pt.y < -10 || pt.y > h + 10)
+      return;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(p.charge, pt.x, pt.y);
+  };
+
+  for (let i = 0; i < chargeParticlesPositive.length; i++)
+    drawParticle(chargeParticlesPositive[i], 'rgba(255,115,115,0.78)');
+  for (let i = 0; i < chargeParticlesNegative.length; i++)
+    drawParticle(chargeParticlesNegative[i], 'rgba(115,190,255,0.78)');
+
+  ctx.strokeStyle = 'rgba(255,240,180,0.25)';
+  for (let i = 0; i < chargeLinkChains.length; i++) {
+    const chain = chargeLinkChains[i];
+    const p0 = toScreen(chain.positive.x, chain.positive.y);
+    for (let j = 0; j < chain.links.length; j++) {
+      const p1 = toScreen(chain.links[j].target.x, chain.links[j].target.y);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+  }
+}
+
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
   if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow)
@@ -616,7 +804,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   }
 
   for (let x = 0; x < chargeGridW; x++)
-    chargeGroundNet[x] *= 0.987;
+    chargeGroundNet[x] = clamp(chargeGroundNet[x] * 0.987, -5.0, 5.0);
 
   if (chargeSources && chargeSources.length > 0) {
     for (let i = 0; i < chargeSources.length; i++) {
@@ -680,11 +868,14 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   }
 
   for (let x = 0; x < chargeGridW; x++) {
-    const lowIdx = chargeGridIndex(x, 1);
-    const lowerCloudNet = chargeGridPositive[lowIdx] - chargeGridNegative[lowIdx];
-    chargeGroundNet[x] += clamp(-lowerCloudNet * 0.07, -0.22, 0.22);
-    chargeGroundNet[x] = clamp(chargeGroundNet[x], -5.0, 5.0);
+    const nearSurfaceIdx = chargeGridIndex(x, 2);
+    const lowerCloudNet = chargeGridPositive[nearSurfaceIdx] - chargeGridNegative[nearSurfaceIdx];
+    const induction = clamp(-lowerCloudNet * 0.042, -0.12, 0.18);
+    chargeGroundNet[x] = clamp(chargeGroundNet[x] + induction, -5.0, 5.0);
   }
+
+  updateChargeParticlesFromGrid(currentIter);
+  buildChargeLinkChains();
 
   if (currentIter - chargeLinksLastStrikeIter < 10 || currentIter < chargeSystemWarmupUntilIter)
     return null;
@@ -692,56 +883,89 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   let best = null;
   let bestScore = 0.0;
 
-  for (let y = 3; y < chargeGridH - 2; y++) {
-    for (let x = 0; x < chargeGridW; x++) {
-      const idx = chargeGridIndex(x, y);
-      const activation = chargeCellActivation[idx];
-      if (activation < 12)
-        continue;
+  for (let i = 0; i < chargeLinkChains.length; i++) {
+    const chain = chargeLinkChains[i];
+    const p = chain.positive;
 
-      const p = chargeGridPositive[idx];
-      const nBelow = chargeGridNegative[chargeGridIndex(x, y - 1)];
-      if (p < 0.22 || nBelow < 0.18)
-        continue;
-
-      const chargeContrast = p + nBelow;
-      const fieldStrength = Math.abs(p - nBelow) + chargeContrast * 0.72;
-      const maturity = Math.min(activation / 100.0, 1.0);
-      const ccScore = fieldStrength * (0.62 + maturity * 0.65);
-      if (ccScore > bestScore) {
-        bestScore = ccScore;
-        best = {x, y, contrast : chargeContrast, cloudToGround : false};
-      }
-
-      const groundOpposition = Math.max(0.0, -chargeGroundNet[x]);
-      const altitudeFactor = 1.0 - y / chargeGridH;
-      const cgScore = (p + groundOpposition * 1.2) * altitudeFactor * (0.9 + maturity * 0.5);
-      if (groundOpposition > 0.16 && cgScore > bestScore) {
-        bestScore = cgScore;
-        best = {x, y, contrast : p + groundOpposition, cloudToGround : true};
+    for (let j = 0; j < chain.links.length; j++) {
+      const link = chain.links[j];
+      const neg = link.target;
+      const centerY = (p.y + neg.y) * 0.5;
+      const centerX = mod((p.x + neg.x) * 0.5 + 1.0, 1.0);
+      const contrast = link.contrast;
+      const maturity = Math.min((p.age + neg.age) / 150.0, 1.0);
+      const score = contrast * (1.0 + maturity) * (1.08 - Math.min(link.distance / 0.08, 0.82));
+      if (score > bestScore) {
+        bestScore = score;
+        best = {
+          x : centerX,
+          y : centerY,
+          contrast,
+          cloudToGround : false,
+          sourceParticle : p,
+          targetParticle : neg
+        };
       }
     }
   }
 
-  if (!best || bestScore < 0.55)
+  for (let x = 0; x < chargeGridW; x++) {
+    const groundCharge = Math.max(0.0, chargeGroundNet[x]);
+    if (groundCharge < 1.4)
+      continue;
+
+    const risingHeight = clamp((groundCharge - 1.1) * 0.11, 0.0, 0.88);
+    let nearestNeg = null;
+    let nearestDist = 99.0;
+    for (let i = 0; i < chargeParticlesNegative.length; i++) {
+      const neg = chargeParticlesNegative[i];
+      if (neg.age < neg.matureAfter)
+        continue;
+      const dx = Math.abs(neg.x - (x + 0.5) / chargeGridW);
+      const wrappedDx = Math.min(dx, 1.0 - dx);
+      const dy = Math.abs(neg.y - risingHeight);
+      const dist = wrappedDx * 1.45 + dy;
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestNeg = neg;
+      }
+    }
+
+    if (!nearestNeg || nearestDist > 0.23)
+      continue;
+
+    const contrast = groundCharge + nearestNeg.strength;
+    const cgScore = contrast * (1.18 - nearestDist);
+    if (cgScore > bestScore) {
+      bestScore = cgScore;
+      best = {
+        x : (x + 0.5) / chargeGridW,
+        y : Math.max(0.035, nearestNeg.y * 0.55),
+        contrast,
+        cloudToGround : true,
+        sourceParticle : null,
+        targetParticle : nearestNeg,
+        groundColumn : x
+      };
+    }
+  }
+
+  if (!best || bestScore < 0.62)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
-  const strikeX = (best.x + 0.5) / chargeGridW;
-  const strikeY = (best.y + 0.5) / chargeGridH;
-  const strikeIntensity = clamp(0.42 + best.contrast * (best.cloudToGround ? 1.18 : 0.9), 0.42, 4.2);
+  const strikeIntensity = clamp(0.44 + best.contrast * (best.cloudToGround ? 1.25 : 0.95), 0.42, 4.4);
 
-  const srcIdx = chargeGridIndex(best.x, best.y);
-  const belowIdx = chargeGridIndex(best.x, Math.max(best.y - 1, 0));
-  chargeGridPositive[srcIdx] *= 0.28;
-  chargeGridNegative[srcIdx] *= 0.34;
-  chargeGridNegative[belowIdx] *= 0.45;
-  chargeGroundNet[best.x] *= 0.45;
-  chargeCellActivation[srcIdx] = 0;
+  if (best.sourceParticle)
+    best.sourceParticle.age = Math.max(0, best.sourceParticle.age - 35);
+  if (best.targetParticle)
+    best.targetParticle.age = Math.max(0, best.targetParticle.age - 35);
+  if (best.groundColumn !== undefined)
+    chargeGroundNet[best.groundColumn] *= 0.28;
 
   return {
-    x : strikeX,
-    y : strikeY,
+    x : best.x,
+    y : best.y,
     intensity : strikeIntensity,
     chargeContrast : best.contrast,
     cloudToGround : best.cloudToGround
@@ -3911,6 +4135,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   document.body.style.overflowX = 'hidden';
 
   canvas = document.getElementById('mainCanvas');
+  ensureChargeOverlayCanvas();
 
   var contextAttributes = {
     alpha : false,
@@ -4805,6 +5030,11 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     // Render output framebuffers need to match canvas resolution
     createBloomFBOs(); // recreate bloom framebuffers
     createHdrFBO();    // recreate hdr framebuffer
+
+    if (chargeRenderOverlay) {
+      chargeRenderOverlay.canvas.width = window.innerWidth;
+      chargeRenderOverlay.canvas.height = window.innerHeight;
+    }
   });
 
   function collectChargeSources(currentIter, sampleColumns = 18)
@@ -7200,6 +7430,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         weatherStations[i].updateCanvas(); // update weather stations
       }
     }
+
+    renderChargeOverlay();
 
     frameNum++;
     requestAnimationFrame(draw);
