@@ -350,6 +350,8 @@ var chargeParticlesPositive = [];
 var chargeParticlesNegative = [];
 var chargeLinkChains = [];
 var chargeRenderOverlay = null;
+var chargeTerrainNormY = null;
+var lastChargeTerrainScanIter = -1000;
 var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
 
@@ -430,41 +432,6 @@ function animateUiElement(element, className = 'ui-pulse')
   element.classList.add(className);
 }
 
-function buildAssistantBriefing()
-{
-  if (!guiControls)
-    return 'Stand by while I inspect the current weather setup.';
-
-  const notes = [];
-
-  if (guiControls.displayMode == 'DISP_REAL')
-    notes.push('Realistic display is active, so storm structure and lighting should be easiest to read.');
-  else if (guiControls.displayMode == 'DISP_HUMD')
-    notes.push('Humidity mode is active, which is great for spotting cloud growth and hidden inflow.');
-  else if (guiControls.displayMode == 'DISP_AIRQUALITY')
-    notes.push('Air-quality mode is active, so you can track smoke and fire impacts clearly.');
-  else
-    notes.push('Consider Realistic or Humidity display modes if you want faster storm diagnosis.');
-
-  if (!guiControls.showWindVectors)
-    notes.push('Turn on wind vectors with Tab when you need a quick read on inflow, outflow, or shear.');
-
-  if (!guiControls.showWeatherStations)
-    notes.push('Weather stations are hidden; enable them if you want point-based surface checks.');
-  else if (weatherStations.length == 0)
-    notes.push('Stations are enabled but none are placed yet, so drop one with the station tool for local telemetry.');
-
-  if (guiControls.tool == 'TOOL_WALL_FIRE')
-    notes.push('Fire painting is armed, and rain or heavy ice can now suppress those hotspots.');
-  else if (guiControls.tool == 'TOOL_WALL_URBAN' || guiControls.tool == 'TOOL_VEGETATION')
-    notes.push('Terrain editing is active; hail can now damage built-up and vegetated surfaces in strong cores.');
-
-  if (currentLightningProfile)
-    notes.push('Latest lightning estimate is about ' + Math.round(currentLightningProfile.temperature) + ' K, suggesting an energized core.');
-
-  return notes.slice(0, 3).join(' ');
-}
-
 function ensureSimulationHud()
 {
   if (simulationHud)
@@ -475,30 +442,25 @@ function ensureSimulationHud()
   shell.className = 'simulation-hud';
   shell.innerHTML = `
     <div class="sim-hud-card sim-hud-primary">
-      <span class="sim-hud-label">Simulation HUD</span>
+      <span class="sim-hud-label">Simulation Controls</span>
       <strong class="sim-hud-value" data-hud-field="displayMode">Temperature</strong>
       <p class="sim-hud-hints" data-hud-field="tool">Tool: Flashlight</p>
     </div>
     <div class="sim-hud-grid">
       <div class="sim-hud-card">
-        <span class="sim-hud-label">Visuals</span>
+        <span class="sim-hud-label">Visual Toggles</span>
         <strong class="sim-hud-value" data-hud-field="visuals">Vectors Off · Drops Off</strong>
-        <p class="sim-hud-hints">Tab toggles vectors. D toggles droplets.</p>
+        <p class="sim-hud-hints">Tab vectors · D droplets · H hide control dock.</p>
       </div>
       <div class="sim-hud-card">
-        <span class="sim-hud-label">Observers</span>
+        <span class="sim-hud-label">Stations & Tools</span>
         <strong class="sim-hud-value" data-hud-field="observers">Stations Hidden</strong>
-        <p class="sim-hud-hints">N hides stations. M arms the station tool.</p>
+        <p class="sim-hud-hints" data-hud-field="controls">N station visibility · M station tool · B brush lock.</p>
       </div>
       <div class="sim-hud-card">
-        <span class="sim-hud-label">Lightning</span>
+        <span class="sim-hud-label">Lightning Links</span>
         <strong class="sim-hud-value" data-hud-field="lightning">Awaiting strike</strong>
-        <p class="sim-hud-hints">Lightning now waits for dense updraft charge buildup before striking.</p>
-      </div>
-      <div class="sim-hud-card sim-assistant-card">
-        <span class="sim-hud-label">AI Assistant</span>
-        <strong class="sim-hud-value">Storm Copilot</strong>
-        <p class="sim-hud-hints" data-hud-field="assistant">Watching the current setup and preparing recommendations.</p>
+        <p class="sim-hud-hints">+ / - links fire IC chains. Ground leaders rise slowly before CG discharge.</p>
       </div>
     </div>`;
 
@@ -510,7 +472,7 @@ function ensureSimulationHud()
     visuals : shell.querySelector('[data-hud-field="visuals"]'),
     observers : shell.querySelector('[data-hud-field="observers"]'),
     lightning : shell.querySelector('[data-hud-field="lightning"]'),
-    assistant : shell.querySelector('[data-hud-field="assistant"]')
+    controls : shell.querySelector('[data-hud-field="controls"]')
   };
 
   return simulationHud;
@@ -549,7 +511,7 @@ function updateSimulationHud()
   hud.visuals.textContent = 'Vectors ' + (guiControls.showWindVectors ? 'On' : 'Off') + ' · Drops ' + (guiControls.showDrops ? 'On' : 'Off');
   hud.observers.textContent = weatherStationCount + ' station' + (weatherStationCount == 1 ? '' : 's') + ' · ' + (guiControls.showWeatherStations ? 'Visible' : 'Hidden');
   hud.lightning.textContent = lightningSummary;
-  hud.assistant.textContent = buildAssistantBriefing();
+  hud.controls.textContent = 'N station visibility · M station tool · Active: ' + toolLabel + '.';
   hud.shell.classList.toggle('compact', !guiControls.showWindVectors && !guiControls.showWeatherStations);
 
   showSimulationHudPulse();
@@ -598,6 +560,8 @@ function initChargeSeparationGrid()
   chargeCellActivation = new Uint16Array(size);
   chargeGroundNet = new Float32Array(chargeGridW);
   chargeGridVerticalFlow = new Float32Array(size);
+  chargeTerrainNormY = new Float32Array(chargeGridW);
+  chargeTerrainNormY.fill(0.01);
 }
 
 function chargeGridIndex(x, y) { return y * chargeGridW + x; }
@@ -625,8 +589,37 @@ function ensureChargeOverlayCanvas()
   return chargeRenderOverlay;
 }
 
+function refreshChargeTerrainProfile(currentIter)
+{
+  if (!chargeTerrainNormY)
+    chargeTerrainNormY = new Float32Array(chargeGridW);
+
+  if (currentIter - lastChargeTerrainScanIter < 12)
+    return;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
+  for (let x = 0; x < chargeGridW; x++) {
+    const simX = clamp(Math.floor(((x + 0.5) / chargeGridW) * sim_res_x), 0, sim_res_x - 1);
+    const wallColumn = new Int8Array(sim_res_y * 4);
+    gl.readBuffer(gl.COLOR_ATTACHMENT2);
+    gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA_INTEGER, gl.BYTE, wallColumn);
+
+    let surfaceY = 0;
+    for (let y = 0; y < sim_res_y; y++) {
+      if (wallColumn[y * 4 + 2] == 0) {
+        surfaceY = y;
+        break;
+      }
+    }
+    chargeTerrainNormY[x] = clamp((surfaceY + 1) / sim_res_y, 0.0, 0.98);
+  }
+
+  lastChargeTerrainScanIter = currentIter;
+}
+
 function updateChargeParticlesFromGrid(currentIter)
 {
+  refreshChargeTerrainProfile(currentIter);
   const targetCount = 44;
 
   function spawnParticles(sign)
@@ -672,7 +665,8 @@ function updateChargeParticlesFromGrid(currentIter)
     p.vx *= 0.94;
     p.vy *= 0.92;
     p.x = mod(p.x + p.vx + 1.0, 1.0);
-    p.y = clamp(p.y + p.vy, 0.02, 0.98);
+    const terrainFloor = chargeTerrainNormY ? chargeTerrainNormY[gx] + 0.008 : 0.02;
+    p.y = clamp(p.y + p.vy, terrainFloor, 0.98);
     p.strength = Math.max(0.08, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
     p.column = gx;
     p.age += 1;
@@ -750,11 +744,11 @@ function renderChargeOverlay()
   const aspect = sim_res_y / sim_res_x;
 
   const toScreen = (x, y) => {
-    const wx = (-x * 2.0 + 1.0) * horizontalDisplayMult;
-    const wy = -y * 2.0 * aspect + aspect;
+    const simX = x * sim_res_x;
+    const simY = y * sim_res_y;
     return {
-      x : ((wx + viewX) * zoom + 1.0) * 0.5 * w,
-      y : (1.0 - ((wy + viewY) * zoom + 1.0) * 0.5) * h
+      x : simToScreenX(simX),
+      y : simToScreenY(simY)
     };
   };
 

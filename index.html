@@ -645,7 +645,7 @@
             left: 24px;
             bottom: 24px;
             z-index: 4;
-            width: min(540px, calc(100vw - 48px));
+            width: min(700px, calc(100vw - 48px));
             display: grid;
             gap: 14px;
             opacity: 0.26;
@@ -680,11 +680,10 @@
         }
 
         .sim-hud-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
-        .ai-assistant-card,
-        .sim-assistant-card {
+        .sim-control-card {
             background: linear-gradient(135deg, rgba(24, 49, 95, 0.92), rgba(13, 28, 56, 0.88));
             border-color: rgba(126, 203, 255, 0.24);
         }
@@ -986,10 +985,10 @@
                             <p>Use a real sounding when you want believable large-scale structure, then use the in-sim lightning controls to tune branching energy and discharge temperature.</p>
                         </div>
 
-                        <div class="launch-side-card ai-assistant-card">
-                            <span class="launch-side-label">AI assistant</span>
-                            <strong>Storm Copilot</strong>
-                            <p>Once the sim launches, the built-in assistant watches your display mode, tools, vectors, stations, and lightning activity to surface quick operational suggestions.</p>
+                        <div class="launch-side-card sim-control-card">
+                            <span class="launch-side-label">Control shortcuts</span>
+                            <strong>Simulation control deck</strong>
+                            <p>After launch, the control HUD focuses on display mode, tool status, station toggles, and charge-link lightning state so you can tune storms quickly without assistant overlays.</p>
                         </div>
                     </div>
 
