@@ -353,6 +353,8 @@ var chargeRenderOverlay = null;
 var chargeTerrainNormY = null;
 var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
+var lightningEvaporationPulse = 0.0;
+var chargeHydrometeorCoupling = 0.0;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -771,6 +773,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     chargeGroundNet[x] = clamp(chargeGroundNet[x] * 0.987, -5.0, 5.0);
 
   if (chargeSources && chargeSources.length > 0) {
+    let hydroAccumulator = 0.0;
     for (let i = 0; i < chargeSources.length; i++) {
       const source = chargeSources[i];
       const gx = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
@@ -778,7 +781,11 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const density = clamp(source.cloudDensity, 0.0, 1.8);
       const updraft = clamp(source.updraft * 95.0, 0.0, 1.0);
       const mixedPhase = clamp(source.mixedPhase, 0.0, 1.0);
-      const injection = (0.05 + density * 0.25) * (0.55 + mixedPhase * 0.9) * iterFactor;
+      const precipitationLoading = clamp(source.precipitationLoading || 0.0, 0.0, 1.0);
+      const iceMix = clamp(source.iceMix || 0.0, 0.0, 1.0);
+      hydroAccumulator += precipitationLoading * 0.6 + iceMix * 0.4;
+      const hydroBoost = 1.0 + precipitationLoading * 0.35 + iceMix * 0.24;
+      const injection = (0.05 + density * 0.25) * (0.55 + mixedPhase * 0.9) * iterFactor * hydroBoost;
 
       for (let dx = -1; dx <= 1; dx++) {
         const x = (gx + dx + chargeGridW) % chargeGridW;
@@ -798,6 +805,9 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
         chargeCellActivation[centerIdx] = Math.min(chargeCellActivation[centerIdx] + 9, 65535);
       }
     }
+    chargeHydrometeorCoupling = hydroAccumulator / Math.max(chargeSources.length, 1);
+  } else {
+    chargeHydrometeorCoupling *= 0.95;
   }
 
   for (let y = 1; y < chargeGridH - 1; y++) {
@@ -825,7 +835,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       chargeGridNegative[leftIdx] = Math.min(chargeGridNegative[leftIdx] + nTransfer * 0.13, chargeCap);
       chargeGridNegative[rightIdx] = Math.min(chargeGridNegative[rightIdx] + nTransfer * 0.13, chargeCap);
 
-      const recombine = Math.min(chargeGridPositive[idx], chargeGridNegative[idx]) * 0.045;
+      const recombine = Math.min(chargeGridPositive[idx], chargeGridNegative[idx]) * (0.052 - chargeHydrometeorCoupling * 0.018);
       chargeGridPositive[idx] -= recombine;
       chargeGridNegative[idx] -= recombine;
     }
@@ -858,7 +868,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const centerX = mod((p.x + neg.x) * 0.5 + 1.0, 1.0);
       const contrast = link.contrast;
       const maturity = Math.min((p.age + neg.age) / 150.0, 1.0);
-      const score = contrast * (1.0 + maturity) * (1.08 - Math.min(link.distance / 0.08, 0.82));
+      const score = contrast * (1.0 + maturity + chargeHydrometeorCoupling * 0.25) * (1.08 - Math.min(link.distance / 0.08, 0.82));
       if (score > bestScore) {
         bestScore = score;
         best = {
@@ -918,7 +928,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
-  const strikeIntensity = clamp(0.44 + best.contrast * (best.cloudToGround ? 1.25 : 0.95), 0.42, 4.4);
+  const strikeIntensity = clamp(0.44 + best.contrast * (best.cloudToGround ? 1.25 : 0.95) + chargeHydrometeorCoupling * 0.42, 0.42, 4.6);
 
   if (best.sourceParticle)
     best.sourceParticle.age = Math.max(0, best.sourceParticle.age - 35);
@@ -996,6 +1006,9 @@ const guiControls_default = {
   IterPerFrame : 10,
   auto_IterPerFrame : true,
   sound : true,
+  enableCameraShake : true,
+  precipitationChargeCoupling : 0.75,
+  lightningEvaporationFeedback : 0.35,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
@@ -5059,12 +5072,16 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
         const normY = simY / sim_res_y;
         const hotspotBias = clamp((updraft - 0.002) * 210.0, 0.0, 1.0);
+        const precipitationLoading = clamp(waterColumn[idx + 2] * 0.015, 0.0, 1.0);
+        const iceMix = clamp(waterColumn[idx + 3] * 0.02, 0.0, 1.0);
         sources.push({
           x : simX / sim_res_x,
           y : normY,
           updraft,
           cloudDensity : cloudDensity * (0.65 + hotspotBias * 0.55),
           mixedPhase,
+          precipitationLoading,
+          iceMix,
           tag : (simX * 8191 + simY * 313) * 0.000001
         });
         activeLayers++;
@@ -6792,6 +6809,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
             // apply vorticity, boundary conditions and user input
             gl.useProgram(boundaryProgram);
+            lightningEvaporationPulse *= 0.985;
+            const evapBoost = 1.0 + lightningEvaporationPulse * guiControls.lightningEvaporationFeedback;
+            gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'waterEvaporation'), guiControls.waterEvaporation * evapBoost);
+            gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'landEvaporation'), guiControls.landEvaporation * (1.0 + lightningEvaporationPulse * 0.12));
             gl.uniform1f(uniformLocation_boundaryProgram_iterNum, iterNum);
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, baseTexture_1);
@@ -6924,7 +6945,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
                 const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
                 const shakeRandomOffset = 0.7 + Math.random() * 0.9;
-                cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor * 2.0, shakeRandomOffset);
+                lightningEvaporationPulse = Math.min(lightningEvaporationPulse + chargeStrike.intensity * 0.16, 2.2);
+                if (guiControls.enableCameraShake)
+                  cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor * 2.0, shakeRandomOffset);
                 updateSimulationHud();
                 if (guiControls.sound) {
                   soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
