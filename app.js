@@ -357,6 +357,8 @@ var lightningEvaporationPulse = 0.0;
 var chargeHydrometeorCoupling = 0.0;
 var chargeGridWindX = null;
 var chargeGridWindY = null;
+var chargeGroundTargetWeight = null;
+var pendingLightningBursts = [];
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -565,6 +567,8 @@ function initChargeSeparationGrid()
   chargeGridVerticalFlow = new Float32Array(size);
   chargeGridWindX = new Float32Array(size);
   chargeGridWindY = new Float32Array(size);
+  chargeGroundTargetWeight = new Float32Array(chargeGridW);
+  chargeGroundTargetWeight.fill(1.0);
   chargeTerrainNormY = new Float32Array(chargeGridW);
   chargeTerrainNormY.fill(0.01);
 }
@@ -771,7 +775,7 @@ function renderChargeOverlay()
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY)
+  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY || !chargeGroundTargetWeight)
     initChargeSeparationGrid();
 
   const size = chargeGridW * chargeGridH;
@@ -875,7 +879,8 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     const lowerCloudNet = chargeGridPositive[nearSurfaceIdx] - chargeGridNegative[nearSurfaceIdx];
     const lowNeg = chargeGridNegative[nearSurfaceIdx];
     const lowPos = chargeGridPositive[nearSurfaceIdx];
-    const induction = clamp((lowNeg * 0.085) - (lowPos * 0.028) - lowerCloudNet * 0.035, -0.10, 0.24);
+    const targetWeight = chargeGroundTargetWeight ? chargeGroundTargetWeight[x] : 1.0;
+    const induction = clamp(((lowNeg * 0.085) - (lowPos * 0.028) - lowerCloudNet * 0.035) * targetWeight, -0.10, 0.34);
     chargeGroundNet[x] = clamp(chargeGroundNet[x] + induction, -8.0, 8.0);
   }
 
@@ -2039,11 +2044,11 @@ class LoadingBar
     masthead.appendChild(eyebrow);
 
     const title = document.createElement('h2');
-    title.textContent = 'Assembling terrain, profiles, lightning, and control systems.';
+    title.textContent = 'Loading simulation assets.';
     masthead.appendChild(title);
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = 'The new launch deck tracks startup stages while the renderer compiles shaders, uploads sounding textures, and bakes dynamic lightning assets.';
+    subtitle.textContent = 'Preparing shaders and weather data.';
     masthead.appendChild(subtitle);
 
     const content = document.createElement('div');
@@ -2099,7 +2104,7 @@ class LoadingBar
       <div class="loading-side-card">
         <span class="loading-side-label">Startup focus</span>
         <strong id="loadingFocusLabel">Renderer + weather model</strong>
-        <p id="loadingFocusCopy">Preparing the upgraded intro deck, loading overlay, HUD, and lightning renderer.</p>
+        <p id="loadingFocusCopy">Preparing UI and lightning renderer.</p>
       </div>
       <div class="loading-side-card">
         <span class="loading-side-label">Pipeline checks</span>
@@ -5075,6 +5080,14 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       const gridX = clamp(Math.floor((simX / sim_res_x) * chargeGridW), 0, chargeGridW - 1);
       if (chargeTerrainNormY)
         chargeTerrainNormY[gridX] = clamp((surfaceY + 1) / sim_res_y, 0.0, 0.98);
+      if (chargeGroundTargetWeight) {
+        const surfaceIdx = surfaceY * 4;
+        const surfaceType = wallColumn[surfaceIdx + 0];
+        const vegetation = Math.max(wallColumn[surfaceIdx + 3], 0.0);
+        const treeBoost = 1.0 + clamp(vegetation / 80.0, 0.0, 0.7);
+        const terrainBoost = surfaceType == 1 || surfaceType == 4 ? 1.15 : 1.0;
+        chargeGroundTargetWeight[gridX] = treeBoost * terrainBoost;
+      }
 
       for (let simY = yStart; simY < yEnd; simY++) {
         const idx = simY * 4;
@@ -6665,6 +6678,40 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   setInterval(calcFps, 1000); // log fps
   requestAnimationFrame(draw);
 
+  function emitLightningStrike(chargeStrike)
+  {
+    const lightningDataValues = new Float32Array([
+      chargeStrike.x,
+      chargeStrike.y,
+      iterNum,
+      chargeStrike.intensity
+    ]);
+    lightningHistoryData.copyWithin(4, 0, 4);
+    lightningHistoryData.set(lightningDataValues, 0);
+    uploadLightningHistoryTexture();
+
+    latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
+    currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, chargeStrike.chargeContrast);
+    const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
+    const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
+    const shakeRandomOffset = 0.7 + Math.random() * 0.9;
+    lightningEvaporationPulse = Math.min(lightningEvaporationPulse + chargeStrike.intensity * 0.16, 2.2);
+    if (guiControls.enableCameraShake)
+      cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor * 2.0, shakeRandomOffset);
+    updateSimulationHud();
+    if (guiControls.sound)
+      soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
+
+    if (!chargeStrike.followUp && Math.random() < 0.85) {
+      const burstCount = 1 + Math.floor(Math.random() * 4);
+      pendingLightningBursts.push({
+        remaining : burstCount - 1,
+        nextIter : iterNum + 2,
+        seed : {...chargeStrike}
+      });
+    }
+  }
+
   function draw()
   { // Runs for every frame
     let camPanSpeed = guiControls.camSpeed;
@@ -6967,30 +7014,31 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               const chargeSources = collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.6)));
               const chargeStrike = updateChargeSeparationSystem(iterNum, chargeSources, guiControls.IterPerFrame);
               if (chargeStrike) {
-                const lightningDataValues = new Float32Array([
-                  chargeStrike.x,
-                  chargeStrike.y,
-                  iterNum,
-                  chargeStrike.intensity
-                ]);
-                lightningHistoryData.copyWithin(4, 0, 4);
-                lightningHistoryData.set(lightningDataValues, 0);
-                uploadLightningHistoryTexture();
-
-                latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
-                currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, chargeStrike.chargeContrast);
-                const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
-                const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
-                const shakeRandomOffset = 0.7 + Math.random() * 0.9;
-                lightningEvaporationPulse = Math.min(lightningEvaporationPulse + chargeStrike.intensity * 0.16, 2.2);
-                if (guiControls.enableCameraShake)
-                  cam.triggerShake(chargeStrike.intensity * currentLightningProfile.shakeFactor * 2.0, shakeRandomOffset);
-                updateSimulationHud();
-                if (guiControls.sound) {
-                  soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
-                }
+                emitLightningStrike(chargeStrike);
               } else {
                 updateChargeSeparationSystem(iterNum, [], guiControls.IterPerFrame * 0.25);
+              }
+
+              for (let b = pendingLightningBursts.length - 1; b >= 0; b--) {
+                const burst = pendingLightningBursts[b];
+                if (iterNum < burst.nextIter)
+                  continue;
+
+                const spread = burst.seed.cloudToGround ? 0.008 : 0.026;
+                const followUpStrike = {
+                  x : mod(burst.seed.x + (Math.random() - 0.5) * spread + 1.0, 1.0),
+                  y : clamp(burst.seed.y + (Math.random() - 0.5) * spread * 0.45, 0.03, 0.95),
+                  intensity : burst.seed.intensity * (0.72 + Math.random() * 0.20),
+                  chargeContrast : burst.seed.chargeContrast * (0.74 + Math.random() * 0.24),
+                  cloudToGround : burst.seed.cloudToGround,
+                  followUp : true
+                };
+                emitLightningStrike(followUpStrike);
+
+                burst.remaining -= 1;
+                burst.nextIter = iterNum + 2 + Math.floor(Math.random() * 2);
+                if (burst.remaining <= 0)
+                  pendingLightningBursts.splice(b, 1);
               }
             }
 

@@ -226,7 +226,11 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
   vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.82, 0.92, 1.0), thermalTint);
   icColor = mix(icColor, vec3(0.94, 0.98, 1.0), branchMask * 0.45);
-  return icColor * glowEnvelope * directBolt * pulse * 3600.0 * max(1.26 - lightningTime * 0.14, 0.0);
+
+  float localCloudMask = smoothstep(0.08, 0.45, texture(waterTex, texCoord).g * 13.0 + texture(waterTex, texCoord).b * 0.6);
+  float sourceCloudMask = smoothstep(0.06, 0.30, texture(waterTex, vec2(mod(pos.x, 1.0), clamp(pos.y, 0.0, 1.0))).g * 12.0);
+  float icCloudGate = localCloudMask * sourceCloudMask;
+  return icColor * glowEnvelope * directBolt * pulse * 3600.0 * max(1.26 - lightningTime * 0.14, 0.0) * icCloudGate;
 }
 
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
