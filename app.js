@@ -453,12 +453,12 @@ function ensureSimulationHud()
       <div class="sim-hud-card">
         <span class="sim-hud-label">Visual Toggles</span>
         <strong class="sim-hud-value" data-hud-field="visuals">Vectors Off · Drops Off</strong>
-        <p class="sim-hud-hints">Tab vectors · D droplets · H hide control dock.</p>
+        <p class="sim-hud-hints">Tab vectors · D droplets.</p>
       </div>
       <div class="sim-hud-card">
         <span class="sim-hud-label">Stations & Tools</span>
         <strong class="sim-hud-value" data-hud-field="observers">Stations Hidden</strong>
-        <p class="sim-hud-hints" data-hud-field="controls">N station visibility · M station tool · B brush lock.</p>
+        <p class="sim-hud-hints" data-hud-field="controls">N station visibility · M station tool.</p>
       </div>
       <div class="sim-hud-card">
         <span class="sim-hud-label">Lightning Links</span>
@@ -514,7 +514,7 @@ function updateSimulationHud()
   hud.visuals.textContent = 'Vectors ' + (guiControls.showWindVectors ? 'On' : 'Off') + ' · Drops ' + (guiControls.showDrops ? 'On' : 'Off');
   hud.observers.textContent = weatherStationCount + ' station' + (weatherStationCount == 1 ? '' : 's') + ' · ' + (guiControls.showWeatherStations ? 'Visible' : 'Hidden');
   hud.lightning.textContent = lightningSummary;
-  hud.controls.textContent = 'N station visibility · M station tool · Active: ' + toolLabel + '.';
+  hud.controls.textContent = 'Controls: N stations · M station tool · Active tool ' + toolLabel + '.';
   hud.shell.classList.toggle('compact', !guiControls.showWindVectors && !guiControls.showWeatherStations);
 
   showSimulationHudPulse();
@@ -787,7 +787,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   }
 
   for (let x = 0; x < chargeGridW; x++)
-    chargeGroundNet[x] = clamp(chargeGroundNet[x] * 0.987, -5.0, 5.0);
+    chargeGroundNet[x] = clamp(chargeGroundNet[x] * 0.996, -8.0, 8.0);
 
   if (chargeSources && chargeSources.length > 0) {
     let hydroAccumulator = 0.0;
@@ -873,8 +873,10 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   for (let x = 0; x < chargeGridW; x++) {
     const nearSurfaceIdx = chargeGridIndex(x, 2);
     const lowerCloudNet = chargeGridPositive[nearSurfaceIdx] - chargeGridNegative[nearSurfaceIdx];
-    const induction = clamp(-lowerCloudNet * 0.042, -0.12, 0.18);
-    chargeGroundNet[x] = clamp(chargeGroundNet[x] + induction, -5.0, 5.0);
+    const lowNeg = chargeGridNegative[nearSurfaceIdx];
+    const lowPos = chargeGridPositive[nearSurfaceIdx];
+    const induction = clamp((lowNeg * 0.085) - (lowPos * 0.028) - lowerCloudNet * 0.035, -0.10, 0.24);
+    chargeGroundNet[x] = clamp(chargeGroundNet[x] + induction, -8.0, 8.0);
   }
 
   updateChargeParticlesFromGrid(currentIter);
@@ -910,10 +912,10 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
   for (let x = 0; x < chargeGridW; x++) {
     const groundCharge = Math.max(0.0, chargeGroundNet[x]);
-    if (groundCharge < 1.4)
+    if (groundCharge < 0.9)
       continue;
 
-    const risingHeight = clamp((groundCharge - 1.1) * 0.11, 0.0, 0.88);
+    const risingHeight = clamp((groundCharge - 0.65) * 0.14, 0.0, 0.90);
     let nearestNeg = null;
     let nearestDist = 99.0;
     for (let i = 0; i < chargeParticlesNegative.length; i++) {

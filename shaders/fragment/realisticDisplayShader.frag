@@ -188,41 +188,47 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
 
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
   float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
-  float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity) * 0.88;
+  float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity) * 1.06;
 
-  float boltWidth = mix(0.16, 0.24, densityFactor);
-  float boltHeight = mix(0.18, 0.30, densityFactor);
-  vec2 boltCoord = vec2(cloudOffset.x / boltWidth + 0.5, 0.5 - cloudOffset.y / boltHeight);
+  float spanX = mix(0.42, 0.62, densityFactor);
+  float spanY = mix(0.12, 0.20, densityFactor);
+
+  float arcX = cloudOffset.x / spanX;
+  float arcCenterY = (arcX * arcX) * 0.18 - 0.04;
+  float arcY = (cloudOffset.y - arcCenterY) / spanY;
+  vec2 boltCoord = vec2(arcX * 0.5 + 0.5, 0.5 - arcY * 0.5);
 
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float curveSeedA = random2d(pos * 91.7 + vec2(strikeIntensity, 0.0));
-  float curveSeedB = random2d(pos.yx * 63.1 + vec2(0.0, strikeIntensity));
-  float curveSeedC = random2d(pos * 127.4 + vec2(1.7, 2.3));
-  float curveSeedD = random2d(pos.yx * 153.2 + vec2(4.1, 0.7));
+  float wiggleA = sin(arcX * 16.0 + pos.x * 210.0 + iterNum * 0.05) * 0.050;
+  float wiggleB = sin(arcX * 31.0 + pos.y * 280.0 + 1.7) * 0.028;
+  float wiggleC = sin(arcX * 57.0 + pos.x * 90.0 + pos.y * 41.0) * 0.015;
+  float curvedCenter = 0.5 + wiggleA + wiggleB + wiggleC;
 
-  float macroCurve = (boltCoord.y - 0.5) * mix(-0.22, 0.22, curveSeedA);
-  float coreCurve = sin(boltCoord.y * mix(7.0, 14.0, curveSeedA) + curveSeedB * PI * 2.0) * mix(0.050, 0.120, densityFactor);
-  coreCurve += sin(boltCoord.y * mix(17.0, 31.0, curveSeedB) + curveSeedC * PI * 2.0) * mix(0.030, 0.080, densityFactor);
-  coreCurve += sin(boltCoord.y * mix(33.0, 57.0, curveSeedC) + curveSeedD * PI * 2.0) * 0.020;
-  boltCoord.x += macroCurve + coreCurve;
+  float trunkWidth = mix(0.040, 0.020, densityFactor);
+  float trunkMask = smoothstep(trunkWidth, trunkWidth * 0.22, abs((boltCoord.y - 0.5) - (curvedCenter - 0.5)));
+
+  float fork1 = smoothstep(0.028, 0.005, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * 22.0 + 0.6) * 0.12)))
+              * smoothstep(0.18, 0.86, boltCoord.x);
+  float fork2 = smoothstep(0.024, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) - sin(arcX * 26.0 + 2.3) * 0.10)))
+              * smoothstep(0.12, 0.90, boltCoord.x);
+  float fork3 = smoothstep(0.020, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * 41.0 + 4.1) * 0.08)))
+              * smoothstep(0.28, 0.98, boltCoord.x);
 
   vec4 texLightning = texture(lightningTex, boltCoord);
   float texCore = max(max(texLightning.r, texLightning.g), texLightning.b) * smoothstep(0.08, 0.24, texLightning.a);
-  float trunkMask = proceduralLightningTrunk(boltCoord, pos, strikeTemperature, branchStrength);
-  float branchMask = proceduralLightningBranches(boltCoord, pos, strikeTemperature, branchStrength);
+  float branchMask = max(fork1, max(fork2, fork3)) * (0.72 + branchStrength * 0.18);
 
-  float boltMask = max(trunkMask, branchMask * 0.92);
-  float directBolt = max(texCore * 0.75, boltMask);
-
-  float glowEnvelope = exp(-pow(cloudOffset.x / (boltWidth * 0.82), 2.0) - pow(cloudOffset.y / (boltHeight * 0.88), 2.0));
-  float sheath = exp(-pow((boltCoord.x - 0.5) / mix(0.11, 0.16, densityFactor), 2.0)) * 0.16;
-  float pulse = 0.88 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.12;
+  float directBolt = max(texCore * 0.66, max(trunkMask, branchMask));
+  float glowEnvelope = exp(-pow(cloudOffset.x / (spanX * 0.88), 2.0) - pow((cloudOffset.y - arcCenterY) / (spanY * 0.92), 2.0));
+  float pulse = 0.86 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.14;
   float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
-  vec3 icColor = mix(vec3(1.0, 0.80, 0.66), vec3(0.86, 0.93, 1.0), thermalTint);
-  return icColor * glowEnvelope * (directBolt + sheath) * pulse * 3200.0 * max(1.22 - lightningTime * 0.18, 0.0);
+  vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.82, 0.92, 1.0), thermalTint);
+  icColor = mix(icColor, vec3(0.94, 0.98, 1.0), branchMask * 0.45);
+  return icColor * glowEnvelope * directBolt * pulse * 3600.0 * max(1.26 - lightningTime * 0.14, 0.0);
 }
+
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
 {
   vec2 lightningTexCoord = texCoord;

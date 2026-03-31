@@ -383,7 +383,7 @@
 
         .launch-side-panel {
             display: grid;
-            gap: 14px;
+            gap: 8px;
         }
 
         .launch-side-card {
@@ -486,7 +486,7 @@
         }
 
         .preview-overview {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: 1fr;
         }
 
         .preview-pill,
@@ -645,12 +645,12 @@
             left: 24px;
             bottom: 24px;
             z-index: 4;
-            width: min(700px, calc(100vw - 48px));
+            width: min(460px, calc(100vw - 32px));
             display: grid;
             gap: 14px;
-            opacity: 0.26;
-            transform: translateY(14px);
-            transition: opacity 0.3s ease, transform 0.3s ease;
+            opacity: 0.65;
+            transform: translateY(4px);
+            transition: opacity 0.2s linear;
             pointer-events: none;
         }
 
@@ -671,21 +671,22 @@
         }
 
         .sim-hud-primary {
-            background: linear-gradient(135deg, rgba(16, 34, 64, 0.96), rgba(10, 20, 40, 0.88));
+            background: rgba(20, 26, 34, 0.92);
         }
 
         .sim-hud-card {
-            padding: 16px 18px;
-            backdrop-filter: blur(18px);
+            padding: 10px 12px;
+            backdrop-filter: none;
+            border-radius: 8px;
         }
 
         .sim-hud-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: 1fr;
         }
 
         .sim-control-card {
-            background: linear-gradient(135deg, rgba(24, 49, 95, 0.92), rgba(13, 28, 56, 0.88));
-            border-color: rgba(126, 203, 255, 0.24);
+            background: rgba(20, 26, 34, 0.92);
+            border-color: rgba(180, 200, 220, 0.2);
         }
 
         .ui-pulse {
