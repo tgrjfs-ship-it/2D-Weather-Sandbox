@@ -830,7 +830,7 @@ const guiControls_default = {
   enablePrecipitation : true,
   showDrops : false,
   paused : false,
-  IterPerFrame : 10,
+  IterPerFrame : 1,
   auto_IterPerFrame : true,
   sound : true,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
@@ -2114,7 +2114,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     #updateShake()
     {
-      if (this.#shakeAmplitude < 0.00001) {
+      if (this.#shakeAmplitude < 0.000015) {
         this.#shakeAmplitude = 0;
         this.#shakeOffsetX = 0;
         this.#shakeOffsetY = 0;
@@ -2125,7 +2125,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
           this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude;
           this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect;
         }
-        this.#shakeAmplitude *= 0.86;
+        this.#shakeAmplitude *= 0.96;
       }
 
       this.renderXpos = this.curXpos + this.#shakeOffsetX;
@@ -2167,7 +2167,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       this.tarZoom *= 1.0 + change;
 
       let minZoom = 0.5;
-      let maxZoom = 35.0 * sim_aspect;
+      let maxZoom = 50.0 * sim_aspect;
 
       if (this.tarZoom > maxZoom) {
         this.tarZoom = maxZoom;
