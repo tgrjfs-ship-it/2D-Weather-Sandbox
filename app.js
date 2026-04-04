@@ -603,6 +603,8 @@ function ensureChargeOverlayCanvas()
 function updateChargeParticlesFromGrid(currentIter)
 {
   const targetCount = 44;
+  const cloudContainmentThreshold = 0.12;
+  const cloudLockThreshold = 0.10;
 
   function spawnParticles(sign)
   {
@@ -613,7 +615,7 @@ function updateChargeParticlesFromGrid(currentIter)
       const y = Math.floor(Math.random() * (chargeGridH - 2)) + 1;
       const idx = chargeGridIndex(x, y);
       const magnitude = sign.grid[idx];
-      if (magnitude < 0.20 || (chargeGridCloudMask && chargeGridCloudMask[idx] < 0.10))
+      if (magnitude < 0.20 || (chargeGridCloudMask && chargeGridCloudMask[idx] < cloudContainmentThreshold))
         continue;
 
       sign.list.push({
@@ -633,6 +635,27 @@ function updateChargeParticlesFromGrid(currentIter)
   spawnParticles({list : chargeParticlesPositive, grid : chargeGridPositive, symbol : '+'});
   spawnParticles({list : chargeParticlesNegative, grid : chargeGridNegative, symbol : '-'});
 
+  const findCloudCellY = (gx, preferredY) => {
+    if (!chargeGridCloudMask)
+      return preferredY;
+
+    let bestY = -1;
+    let bestScore = 0.0;
+    for (let y = 1; y < chargeGridH - 1; y++) {
+      const idx = chargeGridIndex(gx, y);
+      const mask = chargeGridCloudMask[idx];
+      if (mask < cloudContainmentThreshold)
+        continue;
+      const proximity = 1.0 - Math.min(Math.abs(y - preferredY) / Math.max(chargeGridH * 0.35, 1.0), 1.0);
+      const score = mask * 0.8 + proximity * 0.2;
+      if (score > bestScore) {
+        bestScore = score;
+        bestY = y;
+      }
+    }
+    return bestY;
+  };
+
   const advanceParticle = (p, polarity) => {
     const gx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
     const gy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
@@ -648,11 +671,19 @@ function updateChargeParticlesFromGrid(currentIter)
     p.x = mod(p.x + p.vx, 1.0);
     const terrainFloor = chargeTerrainNormY ? chargeTerrainNormY[gx] + 0.008 : 0.02;
     p.y = clamp(p.y + p.vy, terrainFloor, 0.98);
-    const cloudMask = chargeGridCloudMask ? chargeGridCloudMask[idx] : 1.0;
-    if (cloudMask < 0.08) {
-      p.vx *= 0.65;
-      p.vy *= 0.65;
-      p.y = clamp(p.y - Math.sign(p.vy) * 0.004, terrainFloor, 0.98);
+    const nextGx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
+    const nextGy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
+    const nextIdx = chargeGridIndex(nextGx, nextGy);
+    const cloudMask = chargeGridCloudMask ? chargeGridCloudMask[nextIdx] : 1.0;
+    if (cloudMask < cloudLockThreshold) {
+      const cloudY = findCloudCellY(nextGx, nextGy);
+      if (cloudY >= 0) {
+        p.y = (cloudY + 0.25 + Math.random() * 0.5) / chargeGridH;
+      } else {
+        p.strength = 0.0;
+      }
+      p.vx *= 0.35;
+      p.vy *= 0.35;
     }
     p.strength = Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
     p.column = gx;
@@ -2325,10 +2356,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     triggerShake(intensity, randomOffsetScale = 1.0)
     {
-      const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.0), 0.0, 4.0, 0.0015, 0.018);
+      const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.6), 0.0, 4.6, 0.0038, 0.034);
       this.#shakeAmplitude = Math.max(this.#shakeAmplitude, baseAmplitude);
-      this.#shakeOffsetX += (Math.random() * 2.0 - 1.0) * baseAmplitude * randomOffsetScale;
-      this.#shakeOffsetY += (Math.random() * 2.0 - 1.0) * baseAmplitude * sim_aspect * randomOffsetScale;
+      this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * baseAmplitude * 1.55 * randomOffsetScale;
+      this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * baseAmplitude * sim_aspect * 1.55 * randomOffsetScale;
       this.#shakeJitterFrames = 0;
     }
 
@@ -2342,10 +2373,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         this.#shakeJitterFrames -= 1;
         if (this.#shakeJitterFrames <= 0) {
           this.#shakeJitterFrames = 1;
-          this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude;
-          this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect;
+          this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * 1.35;
+          this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect * 1.35;
         }
-        this.#shakeAmplitude *= 0.86;
+        this.#shakeAmplitude *= 0.92;
       }
 
       this.renderXpos = this.curXpos + this.#shakeOffsetX;
@@ -4631,6 +4662,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
+    display_folder.add(guiControls, 'showCharges').name('Show Charges').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -4701,6 +4733,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         soundSystem?.mute();
       }
     });
+    advanced_folder.add(guiControls, 'enableCameraShake').name('Camera Shake');
 
     advanced_folder.add(guiControls, 'resetSettings').name('Reset all settings');
 
@@ -6727,10 +6760,21 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     if (!chargeStrike.followUp && Math.random() < 0.85) {
       const burstCount = 1 + Math.floor(Math.random() * 4);
+      const isIC = !chargeStrike.cloudToGround;
+      const arcDirection = Math.random() < 0.5 ? -1.0 : 1.0;
+      const arcRadiusX = isIC ? (0.020 + Math.random() * 0.030) : (0.004 + Math.random() * 0.010);
+      const arcRadiusY = isIC ? (0.010 + Math.random() * 0.018) : (0.003 + Math.random() * 0.008);
+      const arcCurve = isIC ? (0.55 + Math.random() * 0.95) : (0.30 + Math.random() * 0.55);
       pendingLightningBursts.push({
         remaining : burstCount - 1,
         nextIter : iterNum + 2,
-        seed : {...chargeStrike}
+        seed : {...chargeStrike},
+        arcDirection,
+        arcRadiusX,
+        arcRadiusY,
+        arcCurve,
+        arcPhase : Math.random() * Math.PI * 2.0,
+        arcProgress : 0
       });
     }
   }
@@ -7074,10 +7118,16 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 if (iterNum < burst.nextIter)
                   continue;
 
-                const spread = burst.seed.cloudToGround ? 0.008 : 0.026;
+                burst.arcProgress += 1;
+                const isIC = !burst.seed.cloudToGround;
+                const progressT = clamp((burst.arcProgress + Math.random() * 0.25) / Math.max(burst.remaining + burst.arcProgress, 1.0), 0.0, 1.0);
+                const theta = burst.arcPhase + burst.arcDirection * progressT * Math.PI * burst.arcCurve;
+                const curveX = Math.cos(theta) * burst.arcRadiusX;
+                const curveY = Math.sin(theta) * burst.arcRadiusY;
+                const spread = burst.seed.cloudToGround ? 0.006 : 0.012;
                 const followUpStrike = {
-                  x : mod(burst.seed.x + (Math.random() - 0.5) * spread + 1.0, 1.0),
-                  y : clamp(burst.seed.y + (Math.random() - 0.5) * spread * 0.45, 0.03, 0.95),
+                  x : mod(burst.seed.x + curveX + (Math.random() - 0.5) * spread + 1.0, 1.0),
+                  y : clamp(burst.seed.y + curveY + (Math.random() - 0.5) * spread * (isIC ? 0.85 : 0.45), 0.03, 0.95),
                   intensity : burst.seed.intensity * (0.72 + Math.random() * 0.20),
                   chargeContrast : burst.seed.chargeContrast * (0.74 + Math.random() * 0.24),
                   cloudToGround : burst.seed.cloudToGround,
