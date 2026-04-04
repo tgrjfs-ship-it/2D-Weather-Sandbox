@@ -76,11 +76,11 @@ void exchangeWith(vec2 texCoord) // exchange temperature and water
 float calcLandEvaporation(float T, float W, float V, float M, float sunlight) // temperature, total water, vegetation, soil moisture, sunlight
 {
   float humidityDeficit = max(maxWater(T) - W, 0.0);
-  float vegetationResponse = 0.35 + V / 127.0 * 0.80;
-  float moistureResponse = sqrt(clamp((M + 1.0) / 40.0, 0.0, 1.0));
+  float vegetationResponse = 0.15 + V / 127.0 * 0.55;
+  float moistureResponse = pow(clamp((M + 1.0) / 55.0, 0.0, 1.0), 1.25);
   float temperatureResponse = map_rangeC(T, CtoK(-5.0), CtoK(35.0), 0.20, 1.45);
   float solarResponse = 0.55 + sunlight / standardSunBrightness * 0.90;
-  return humidityDeficit * landEvaporation * vegetationResponse * moistureResponse * temperatureResponse * solarResponse * 0.035;
+  return humidityDeficit * landEvaporation * vegetationResponse * moistureResponse * temperatureResponse * solarResponse * 0.026;
 }
 
 float calcWaterEvaporation(float T, float W, float sunlight, vec2 velocity)

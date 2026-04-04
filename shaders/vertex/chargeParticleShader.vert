@@ -23,6 +23,6 @@ void main()
   clip.y = (world.y + view.y) * view.z;
 
   gl_Position = vec4(clip, 0.0, 1.0);
-  gl_PointSize = max(2.0, 4.2 * view.z);
+  gl_PointSize = max(8.0, 11.0 * view.z);
   vSign = particleData.z;
 }
