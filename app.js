@@ -6830,6 +6830,42 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     if (!guiControls.showCharges)
       return 0;
 
+    const refreshChargeParticlesFromCloudMask = () => {
+      if (!chargeGridCloudMask)
+        return;
+
+      chargeParticlesPositive.length = 0;
+      chargeParticlesNegative.length = 0;
+      const targetPerSign = 110;
+      let scanned = 0;
+      let cursorX = Math.floor((iterNum * 1.7) % chargeGridW);
+      let cursorY = Math.floor((iterNum * 2.1) % chargeGridH);
+
+      while (scanned < chargeGridW * chargeGridH * 2 && (chargeParticlesPositive.length < targetPerSign || chargeParticlesNegative.length < targetPerSign)) {
+        const x = (cursorX + scanned * 13) % chargeGridW;
+        const y = (cursorY + scanned * 7) % chargeGridH;
+        const idx = chargeGridIndex(x, y);
+        const mask = chargeGridCloudMask[idx];
+        scanned++;
+        if (mask < 0.16)
+          continue;
+
+        const isUpperCloud = y > chargeGridH * 0.52;
+        const particle = {
+          x : (x + 0.2 + Math.random() * 0.6) / chargeGridW,
+          y : (y + 0.2 + Math.random() * 0.6) / chargeGridH,
+          strength : mask
+        };
+        if (isUpperCloud) {
+          if (chargeParticlesPositive.length < targetPerSign)
+            chargeParticlesPositive.push(particle);
+        } else if (chargeParticlesNegative.length < targetPerSign) {
+          chargeParticlesNegative.push(particle);
+        }
+      }
+    };
+    refreshChargeParticlesFromCloudMask();
+
     let count = 0;
     const appendParticle = (p, sign) => {
       if (count >= maxChargeRenderParticles)
@@ -7163,6 +7199,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
+              collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.3)));
               const precipStrike = pollPrecipitationLightning();
               if (precipStrike)
                 emitLightningStrike(precipStrike);
