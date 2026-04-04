@@ -273,9 +273,9 @@ void main()
     deposition[SNOW_DEPOSITION] /= pntSize; // only width matters because it's only applied at surface layer
 
     // lightning candidate write to dedicated pixel(1,0) for extraction.
-    float lightningCharge = abs(feedback[CHARGE]) * (0.8 + feedback[MASS] * 4.5);
+    float lightningCharge = abs(feedback[CHARGE]) * (1.1 + feedback[MASS] * 5.6);
     float lightningGate = random2d(vec2(newPos.x + iterNum * 0.007, newPos.y - iterNum * 0.013));
-    bool lightningCandidate = water[CLOUD] > 0.18 && lightningCharge > 0.08 && lightningGate < min(lightningCharge * 0.05, 0.12);
+    bool lightningCandidate = water[CLOUD] > 0.14 && lightningCharge > 0.05 && lightningGate < min(lightningCharge * 0.11, 0.24);
 
     if (lightningCandidate) {
       float intensity = clamp(lightningCharge * 8.0, 0.4, 4.6);

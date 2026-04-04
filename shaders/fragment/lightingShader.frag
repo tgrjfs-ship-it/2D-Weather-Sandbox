@@ -124,9 +124,10 @@ void main()
 
           float emissivity;                                   // how opage it is too ir, the rest is let trough, no
                                                               // reflection
-          emissivity = greenhouseGases;                       // greenhouse gasses
-          emissivity += water[TOTAL] * waterGreenHouseEffect; // water vapor
-          emissivity += water[CLOUD] * 5.0;                   // cloud water blocks all IR
+          float greenhouseBase = clamp(greenhouseGases * 0.85, 0.0, 0.45);
+          float vaporGreenhouse = 1.0 - exp(-water[TOTAL] * waterGreenHouseEffect * 4.0);
+          emissivity = greenhouseBase + vaporGreenhouse * 0.58;
+          emissivity += min(water[CLOUD] * 4.2, 0.85);        // cloud water blocks all IR
                                                               // emissivity += water[SMOKE] * 0.0001;                // 0.0001 smoke Should be prettymuch transparent to IR
 
           emissivity *= cellHeightCompensation;               // compensate for the height of the cell
@@ -154,7 +155,7 @@ void main()
 
       reflectedLight.rgb += FinalFireCol * 0.1;
 
-      net_heating *= IR_rate;
+      net_heating *= (0.65 + IR_rate * 0.35);
 
       light = vec4(sunlight, net_heating, IR_down, IR_up);
       // light = vec4(1, 0, 0, 0);

@@ -6791,6 +6791,40 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
   }
 
+  function pollPrecipitationLightning()
+  {
+    gl.viewport(0, 0, 1, 1);
+    gl.useProgram(lightningLocationProgram);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, precipitationFeedbackTexture);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, lightningDataFrameBuff);
+    gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    const strikeSample = new Float32Array(4);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, strikeSample);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, sim_res_x, sim_res_y);
+
+    const strikeIter = Math.round(strikeSample[2]);
+    const intensity = strikeSample[3];
+    if (strikeIter < iterNum - 1 || strikeIter > iterNum || intensity < 0.35)
+      return null;
+
+    const x = clamp(strikeSample[0], 0.0, 1.0);
+    const y = clamp(strikeSample[1], 0.03, 0.95);
+    const cloudToGround = y < 0.32;
+    return {
+      x,
+      y,
+      intensity : clamp(intensity, 0.4, 4.6),
+      chargeContrast : clamp(intensity * 0.92, 0.4, 4.5),
+      chargeEnergy : clamp((intensity - 0.35) / 4.25, 0.0, 1.0),
+      cloudToGround
+    };
+  }
+
   function updateChargeParticleGpuBuffer()
   {
     if (!guiControls.showCharges)
@@ -7011,7 +7045,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
             // apply vorticity, boundary conditions and user input
             gl.useProgram(boundaryProgram);
-            lightningEvaporationPulse *= 0.985;
+            lightningEvaporationPulse *= 0.965;
             const evapBoost = 1.0 + lightningEvaporationPulse * guiControls.lightningEvaporationFeedback;
             gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'waterEvaporation'), guiControls.waterEvaporation * evapBoost);
             gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'landEvaporation'), guiControls.landEvaporation * (1.0 + lightningEvaporationPulse * 0.12));
@@ -7129,13 +7163,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
-              const chargeSources = collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.6)));
-              const chargeStrike = updateChargeSeparationSystem(iterNum, chargeSources, guiControls.IterPerFrame);
-              if (chargeStrike) {
-                emitLightningStrike(chargeStrike);
-              } else {
-                updateChargeSeparationSystem(iterNum, [], guiControls.IterPerFrame * 0.25);
-              }
+              const precipStrike = pollPrecipitationLightning();
+              if (precipStrike)
+                emitLightningStrike(precipStrike);
 
               for (let b = pendingLightningBursts.length - 1; b >= 0; b--) {
                 const burst = pendingLightningBursts[b];
@@ -7687,7 +7717,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
 
     const monthStr = simDateTime.toLocaleString('en-us', {month : 'short', day : 'numeric'});
-    return timeStr + '&nbsp; ' + monthStr;
+    const simSpeed = Math.max(1, Math.round(timePerIteration * guiControls.IterPerFrame * FPS * 3600));
+    return timeStr + '&nbsp; ' + monthStr + '&nbsp; <span style="font-size:0.58em; opacity:0.82;">(' + simSpeed + 'x sim)</span>';
   }
 
   function onUpdateTimeOfDaySlider()
