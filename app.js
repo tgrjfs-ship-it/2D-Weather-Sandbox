@@ -358,6 +358,7 @@ var chargeHydrometeorCoupling = 0.0;
 var chargeGridWindX = null;
 var chargeGridWindY = null;
 var chargeGroundTargetWeight = null;
+var chargeGridCloudMask = null;
 var pendingLightningBursts = [];
 
 const PI = 3.14159265359;
@@ -569,6 +570,7 @@ function initChargeSeparationGrid()
   chargeGridWindY = new Float32Array(size);
   chargeGroundTargetWeight = new Float32Array(chargeGridW);
   chargeGroundTargetWeight.fill(1.0);
+  chargeGridCloudMask = new Float32Array(size);
   chargeTerrainNormY = new Float32Array(chargeGridW);
   chargeTerrainNormY.fill(0.01);
 }
@@ -611,7 +613,7 @@ function updateChargeParticlesFromGrid(currentIter)
       const y = Math.floor(Math.random() * (chargeGridH - 2)) + 1;
       const idx = chargeGridIndex(x, y);
       const magnitude = sign.grid[idx];
-      if (magnitude < 0.20)
+      if (magnitude < 0.20 || (chargeGridCloudMask && chargeGridCloudMask[idx] < 0.10))
         continue;
 
       sign.list.push({
@@ -646,7 +648,13 @@ function updateChargeParticlesFromGrid(currentIter)
     p.x = mod(p.x + p.vx, 1.0);
     const terrainFloor = chargeTerrainNormY ? chargeTerrainNormY[gx] + 0.008 : 0.02;
     p.y = clamp(p.y + p.vy, terrainFloor, 0.98);
-    p.strength = Math.max(0.08, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
+    const cloudMask = chargeGridCloudMask ? chargeGridCloudMask[idx] : 1.0;
+    if (cloudMask < 0.08) {
+      p.vx *= 0.65;
+      p.vy *= 0.65;
+      p.y = clamp(p.y - Math.sign(p.vy) * 0.004, terrainFloor, 0.98);
+    }
+    p.strength = Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
     p.column = gx;
     p.age += 1;
   };
@@ -654,14 +662,14 @@ function updateChargeParticlesFromGrid(currentIter)
   for (let i = chargeParticlesPositive.length - 1; i >= 0; i--) {
     const p = chargeParticlesPositive[i];
     advanceParticle(p, 1.0);
-    if (p.age > 180 || p.strength < 0.09)
+    if (p.age > 520 || p.strength < 0.04)
       chargeParticlesPositive.splice(i, 1);
   }
 
   for (let i = chargeParticlesNegative.length - 1; i >= 0; i--) {
     const p = chargeParticlesNegative[i];
     advanceParticle(p, -1.0);
-    if (p.age > 180 || p.strength < 0.09)
+    if (p.age > 520 || p.strength < 0.04)
       chargeParticlesNegative.splice(i, 1);
   }
 }
@@ -681,7 +689,7 @@ function buildChargeLinkChains()
     let contrast = seed.strength;
     let expectPositive = false;
 
-    for (let hop = 0; hop < 5; hop++) {
+    for (let hop = 0; hop < 7; hop++) {
       const source = nodes[nodes.length - 1];
       const pool = expectPositive ? chargeParticlesPositive : chargeParticlesNegative;
       let nearest = null;
@@ -775,7 +783,7 @@ function renderChargeOverlay()
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY || !chargeGroundTargetWeight)
+  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY || !chargeGroundTargetWeight || !chargeGridCloudMask)
     initChargeSeparationGrid();
 
   const size = chargeGridW * chargeGridH;
@@ -786,6 +794,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     chargeGridPositive[i] *= 0.989;
     chargeGridNegative[i] *= 0.989;
     chargeGridVerticalFlow[i] *= 0.90;
+    chargeGridCloudMask[i] *= 0.965;
     if (chargeCellActivation[i] > 0)
       chargeCellActivation[i] -= 1;
   }
@@ -1041,6 +1050,7 @@ const guiControls_default = {
   enableCameraShake : true,
   precipitationChargeCoupling : 0.75,
   lightningEvaporationFeedback : 0.35,
+  showCharges : true,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
@@ -4144,7 +4154,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   document.body.style.overflowX = 'hidden';
 
   canvas = document.getElementById('mainCanvas');
-  ensureChargeOverlayCanvas();
 
   var contextAttributes = {
     alpha : false,
@@ -5040,10 +5049,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     createBloomFBOs(); // recreate bloom framebuffers
     createHdrFBO();    // recreate hdr framebuffer
 
-    if (chargeRenderOverlay) {
-      chargeRenderOverlay.canvas.width = window.innerWidth;
-      chargeRenderOverlay.canvas.height = window.innerHeight;
-    }
   });
 
   function collectChargeSources(currentIter, sampleColumns = 18)
@@ -5097,6 +5102,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
           chargeGridWindX[gridIdx] = baseColumn[idx + 0];
           chargeGridWindY[gridIdx] = baseColumn[idx + 1];
         }
+        if (chargeGridCloudMask)
+          chargeGridCloudMask[gridIdx] = Math.max(chargeGridCloudMask[gridIdx], clamp(waterColumn[idx + 1] * 1.6, 0.0, 1.0));
       }
 
       let activeLayers = 0;
@@ -5640,6 +5647,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const realDispVertexShader = await loadShader('realDispShader.vert');
   const precipDisplayVertexShader = await loadShader('precipDisplayShader.vert');
   const postProcessingVertexShader = await loadShader('postProcessingShader.vert');
+  const chargeParticleVertexShader = await loadShader('chargeParticleShader.vert');
 
   const pressureShader = await loadShader('pressureShader.frag');
   const velocityShader = await loadShader('velocityShader.frag');
@@ -5666,6 +5674,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const postProcessingShader = await loadShader('postProcessingShader.frag');
   const isolateBrightPartsShader = await loadShader('isolateBrightPartsShader.frag');
   const bloomBlurShader = await loadShader('bloomBlurShader.frag');
+  const chargeParticleShader = await loadShader('chargeParticleShader.frag');
 
 
   // create programs
@@ -5694,6 +5703,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const postProcessingProgram = createProgram(postProcessingVertexShader, postProcessingShader);
   const isolateBrightPartsProgram = createProgram(postProcessingVertexShader, isolateBrightPartsShader);
   const bloomBlurProgram = createProgram(postProcessingVertexShader, bloomBlurShader);
+  const chargeParticleProgram = createProgram(chargeParticleVertexShader, chargeParticleShader);
   // const lightBlurProgram = createProgram(postProcessingVertexShader, bloomBlurShader);
 
 
@@ -5809,6 +5819,19 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     // single vertex to this attribute
   );
 
+  gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+  const maxChargeRenderParticles = 600;
+  const chargeParticleData = new Float32Array(maxChargeRenderParticles * 3);
+  const chargeParticleVao = gl.createVertexArray();
+  const chargeParticleBuffer = gl.createBuffer();
+  gl.bindVertexArray(chargeParticleVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, chargeParticleBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, chargeParticleData.byteLength, gl.DYNAMIC_DRAW);
+  const chargeAttrib = gl.getAttribLocation(chargeParticleProgram, 'particleData');
+  gl.enableVertexAttribArray(chargeAttrib);
+  gl.vertexAttribPointer(chargeAttrib, 3, gl.FLOAT, gl.FALSE, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -6712,6 +6735,33 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
   }
 
+  function updateChargeParticleGpuBuffer()
+  {
+    if (!guiControls.showCharges)
+      return 0;
+
+    let count = 0;
+    const appendParticle = (p, sign) => {
+      if (count >= maxChargeRenderParticles)
+        return;
+      const base = count * 3;
+      chargeParticleData[base + 0] = p.x;
+      chargeParticleData[base + 1] = p.y;
+      chargeParticleData[base + 2] = sign;
+      count++;
+    };
+
+    for (let i = 0; i < chargeParticlesPositive.length; i++)
+      appendParticle(chargeParticlesPositive[i], 1.0);
+    for (let i = 0; i < chargeParticlesNegative.length; i++)
+      appendParticle(chargeParticlesNegative[i], -1.0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, chargeParticleBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chargeParticleData.subarray(0, count * 3));
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    return count;
+  }
+
   function draw()
   { // Runs for every frame
     let camPanSpeed = guiControls.camSpeed;
@@ -7511,13 +7561,26 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // draw to canvas
     }
 
+    const chargeParticleCount = updateChargeParticleGpuBuffer();
+    if (chargeParticleCount > 0) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(chargeParticleProgram);
+      gl.uniform2f(gl.getUniformLocation(chargeParticleProgram, 'aspectRatios'), sim_aspect, canvas_aspect);
+      gl.uniform3f(gl.getUniformLocation(chargeParticleProgram, 'view'), cam.renderXpos, cam.renderYpos, cam.curZoom);
+      gl.uniform1f(gl.getUniformLocation(chargeParticleProgram, 'Xmult'), horizontalDisplayMult);
+      gl.bindVertexArray(chargeParticleVao);
+      gl.drawArrays(gl.POINTS, 0, chargeParticleCount);
+      gl.bindVertexArray(fluidVao);
+      gl.disable(gl.BLEND);
+    }
+
     if (displayWeatherStations) {
       for (i = 0; i < weatherStations.length; i++) {
         weatherStations[i].updateCanvas(); // update weather stations
       }
     }
 
-    renderChargeOverlay();
 
     frameNum++;
     requestAnimationFrame(draw);
