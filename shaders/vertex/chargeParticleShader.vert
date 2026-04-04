@@ -12,7 +12,6 @@ out float vSign;
 void main()
 {
   vec2 pos = vec2(particleData.x, particleData.y);
-  pos.x = mod(pos.x, 1.0);
 
   vec2 world;
   world.x = (-pos.x * 2.0 + 1.0) * Xmult;

@@ -654,16 +654,22 @@ function updateChargeParticlesFromGrid(currentIter)
     p.x = mod(p.x + p.vx, 1.0);
     const terrainFloor = chargeTerrainNormY ? chargeTerrainNormY[gx] + 0.008 : 0.02;
     p.y = clamp(p.y + p.vy, terrainFloor, 0.98);
-    const nextGx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
-    const nextGy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
-    const nextIdx = chargeGridIndex(nextGx, nextGy);
-    const cloudMask = chargeGridCloudMask ? chargeGridCloudMask[nextIdx] : 1.0;
+    let nextGx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
+    let nextGy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
+    let nextIdx = chargeGridIndex(nextGx, nextGy);
+    let cloudMask = chargeGridCloudMask ? chargeGridCloudMask[nextIdx] : 1.0;
     let removeParticle = false;
     if (cloudMask < cloudLockThreshold) {
       const cloudCell = findCloudCell(nextGx, nextGy);
       if (cloudCell) {
         p.x = mod((cloudCell.x + 0.15 + Math.random() * 0.7) / chargeGridW, 1.0);
         p.y = (cloudCell.y + 0.20 + Math.random() * 0.6) / chargeGridH;
+        nextGx = clamp(Math.floor(p.x * chargeGridW), 0, chargeGridW - 1);
+        nextGy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
+        nextIdx = chargeGridIndex(nextGx, nextGy);
+        cloudMask = chargeGridCloudMask ? chargeGridCloudMask[nextIdx] : 0.0;
+        if (cloudMask < cloudContainmentThreshold)
+          removeParticle = true;
       } else {
         removeParticle = true;
       }
@@ -672,7 +678,7 @@ function updateChargeParticlesFromGrid(currentIter)
     }
     p.strength = removeParticle ? 0.0 : Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
     p.energy = removeParticle ? 0.0 : clamp(p.strength / 6.0, 0.0, 1.0);
-    p.column = gx;
+    p.column = nextGx;
     p.age += 1;
   };
 
