@@ -837,12 +837,72 @@
             box-shadow: inset 0 0 0 1px rgba(255, 59, 106, 0.28);
         }
 
+        .dg .close-button {
+            min-height: 34px !important;
+            line-height: 34px !important;
+            padding: 0 14px !important;
+            touch-action: manipulation;
+        }
+
+        .dg .close-button::after {
+            content: "";
+            position: absolute;
+            inset: -6px -8px;
+        }
+
         .dg .c .slider {
             background: rgba(45, 14, 23, 0.9) !important;
         }
 
         .dg .c .slider-fg {
             background: linear-gradient(90deg, #ff4d7d, #ba39ff) !important;
+        }
+
+        .dg .cr.boolean {
+            min-height: 30px;
+        }
+
+        .dg .cr.boolean .c {
+            width: 52px !important;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .dg .cr.boolean input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 46px;
+            height: 24px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(30, 9, 15, 0.96), rgba(20, 8, 14, 0.96));
+            border: 1px solid rgba(255, 59, 106, 0.4);
+            position: relative;
+            cursor: pointer;
+            touch-action: manipulation;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.4);
+        }
+
+        .dg .cr.boolean input[type="checkbox"]::before {
+            content: "";
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            top: 2px;
+            left: 2px;
+            border-radius: 6px;
+            background: linear-gradient(180deg, #5a1f30, #2b0e19);
+            transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+        }
+
+        .dg .cr.boolean input[type="checkbox"]:checked {
+            background: linear-gradient(180deg, rgba(69, 18, 38, 0.98), rgba(42, 9, 23, 0.98));
+        }
+
+        .dg .cr.boolean input[type="checkbox"]:checked::before {
+            transform: translateX(22px);
+            background: linear-gradient(180deg, #ff6d95, #ff3b6a);
+            box-shadow: 0 0 12px rgba(255, 59, 106, 0.6);
         }
 
         @keyframes gxCardIn {

@@ -349,7 +349,6 @@ var chargeSystemWarmupUntilIter = 320;
 var chargeParticlesPositive = [];
 var chargeParticlesNegative = [];
 var chargeLinkChains = [];
-var chargeRenderOverlay = null;
 var chargeTerrainNormY = null;
 var cachedChargeSources = [];
 var lastChargeSourceScanIter = -1000;
@@ -577,35 +576,6 @@ function initChargeSeparationGrid()
 
 function chargeGridIndex(x, y) { return y * chargeGridW + x; }
 
-function ensureChargeOverlayCanvas()
-{
-  if (chargeRenderOverlay)
-  {
-    if (chargeRenderOverlay.canvas.width != window.innerWidth || chargeRenderOverlay.canvas.height != window.innerHeight) {
-      chargeRenderOverlay.canvas.width = window.innerWidth;
-      chargeRenderOverlay.canvas.height = window.innerHeight;
-    }
-    return chargeRenderOverlay;
-  }
-
-  const overlayCanvas = document.createElement('canvas');
-  overlayCanvas.id = 'chargeOverlayCanvas';
-  overlayCanvas.style.position = 'fixed';
-  overlayCanvas.style.left = '0';
-  overlayCanvas.style.top = '0';
-  overlayCanvas.style.pointerEvents = 'none';
-  overlayCanvas.style.zIndex = '3';
-  overlayCanvas.width = window.innerWidth;
-  overlayCanvas.height = window.innerHeight;
-  document.body.appendChild(overlayCanvas);
-
-  chargeRenderOverlay = {
-    canvas : overlayCanvas,
-    ctx : overlayCanvas.getContext('2d')
-  };
-  return chargeRenderOverlay;
-}
-
 function updateChargeParticlesFromGrid(currentIter)
 {
   const targetCount = 44;
@@ -632,6 +602,7 @@ function updateChargeParticlesFromGrid(currentIter)
         age : 0,
         charge : sign.symbol,
         strength : magnitude,
+        energy : clamp(magnitude / 6.0, 0.0, 1.0),
         matureAfter : 18 + Math.floor(Math.random() * 30),
         column : x
       });
@@ -700,6 +671,7 @@ function updateChargeParticlesFromGrid(currentIter)
       p.vy *= 0.35;
     }
     p.strength = removeParticle ? 0.0 : Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
+    p.energy = removeParticle ? 0.0 : clamp(p.strength / 6.0, 0.0, 1.0);
     p.column = gx;
     p.age += 1;
   };
@@ -732,6 +704,7 @@ function buildChargeLinkChains()
 
     const nodes = [ seed ];
     let contrast = seed.strength;
+    let energy = seed.energy || 0.0;
     let expectPositive = false;
 
     for (let hop = 0; hop < 7; hop++) {
@@ -759,6 +732,7 @@ function buildChargeLinkChains()
 
       nodes.push(nearest);
       contrast += nearest.strength;
+      energy += nearest.energy || 0.0;
       expectPositive = !expectPositive;
     }
 
@@ -767,64 +741,12 @@ function buildChargeLinkChains()
 
     chargeLinkChains.push({
       nodes,
-      contrast : contrast / nodes.length
+      contrast : contrast / nodes.length,
+      energy : energy / nodes.length
     });
   }
 }
 
-
-function renderChargeOverlay()
-{
-  const overlay = ensureChargeOverlayCanvas();
-  if (!overlay || !overlay.ctx)
-    return;
-
-  const ctx = overlay.ctx;
-  const w = overlay.canvas.width;
-  const h = overlay.canvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  const viewX = cam.renderXpos;
-  const viewY = cam.renderYpos;
-  const zoom = cam.curZoom;
-  const aspect = sim_res_y / sim_res_x;
-
-  const toScreen = (x, y) => {
-    const simX = x * sim_res_x;
-    const simY = y * sim_res_y;
-    return {
-      x : simToScreenX(simX),
-      y : simToScreenY(simY)
-    };
-  };
-
-  const drawParticle = (p, color) => {
-    const pt = toScreen(p.x, p.y);
-    if (pt.x < -10 || pt.x > w + 10 || pt.y < -10 || pt.y > h + 10)
-      return;
-    ctx.fillStyle = color;
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText(p.charge, pt.x, pt.y);
-  };
-
-  for (let i = 0; i < chargeParticlesPositive.length; i++)
-    drawParticle(chargeParticlesPositive[i], 'rgba(255,115,115,0.78)');
-  for (let i = 0; i < chargeParticlesNegative.length; i++)
-    drawParticle(chargeParticlesNegative[i], 'rgba(115,190,255,0.78)');
-
-  ctx.strokeStyle = 'rgba(255,240,180,0.25)';
-  for (let i = 0; i < chargeLinkChains.length; i++) {
-    const chain = chargeLinkChains[i];
-    for (let j = 0; j < chain.nodes.length - 1; j++) {
-      const p0 = toScreen(chain.nodes[j].x, chain.nodes[j].y);
-      const p1 = toScreen(chain.nodes[j + 1].x, chain.nodes[j + 1].y);
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
-    }
-  }
-}
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
@@ -955,13 +877,15 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     const centerX = mod((head.x + tail.x) * 0.5 + 1.0, 1.0);
     const maturity = Math.min((head.age + tail.age) / 150.0, 1.0);
     const chainLengthBoost = 1.0 + (chain.nodes.length - 2) * 0.16;
-    const score = chain.contrast * chainLengthBoost * (1.0 + maturity + chargeHydrometeorCoupling * 0.25);
+    const chainEnergy = clamp(chain.energy || 0.0, 0.0, 1.0);
+    const score = chain.contrast * chainLengthBoost * (1.0 + maturity + chargeHydrometeorCoupling * 0.25 + chainEnergy * 0.35);
     if (score > bestScore) {
       bestScore = score;
       best = {
         x : centerX,
         y : centerY,
         contrast : chain.contrast * chainLengthBoost,
+        energy : chainEnergy,
         cloudToGround : false,
         sourceParticle : head,
         targetParticle : tail
@@ -995,13 +919,15 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       continue;
 
     const contrast = groundCharge + nearestNeg.strength;
-    const cgScore = contrast * (1.18 - nearestDist);
+    const cgEnergy = clamp((groundCharge / 8.0) * 0.65 + (nearestNeg.energy || 0.0) * 0.35, 0.0, 1.0);
+    const cgScore = contrast * (1.18 - nearestDist) * (1.0 + cgEnergy * 0.45);
     if (cgScore > bestScore) {
       bestScore = cgScore;
       best = {
         x : (x + 0.5) / chargeGridW,
         y : Math.max(0.035, nearestNeg.y * 0.55),
         contrast,
+        energy : cgEnergy,
         cloudToGround : true,
         sourceParticle : null,
         targetParticle : nearestNeg,
@@ -1028,6 +954,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     y : best.y,
     intensity : strikeIntensity,
     chargeContrast : best.contrast,
+    chargeEnergy : best.energy || 0.0,
     cloudToGround : best.cloudToGround
   };
 }
@@ -6761,7 +6688,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     uploadLightningHistoryTexture();
 
     latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
-    currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, chargeStrike.chargeContrast);
+    const chargeEnergy = clamp(chargeStrike.chargeEnergy || 0.0, 0.0, 1.0);
+    const effectiveContrast = chargeStrike.chargeContrast * (1.0 + chargeEnergy * 0.95);
+    currentLightningProfile = deriveLightningProfile(chargeStrike.x, chargeStrike.y, chargeStrike.intensity, effectiveContrast);
+    currentLightningProfile.temperature *= (1.0 + chargeEnergy * 0.35);
     const lightningThermalBoost = Math.max(currentLightningProfile.temperature / 25500.0, 0.65);
     const lightningIntensity = Math.pow(chargeStrike.intensity, 2.0) * lightningThermalBoost;
     const shakeRandomOffset = 0.7 + Math.random() * 0.9;
@@ -7177,6 +7107,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                   y : clamp(burst.seed.y + curveY + (Math.random() - 0.5) * spread * (isIC ? 0.85 : 0.45), 0.03, 0.95),
                   intensity : burst.seed.intensity * (burst.seed.cloudToGround ? (0.84 + Math.random() * 0.30) : (0.72 + Math.random() * 0.20)),
                   chargeContrast : burst.seed.chargeContrast * (0.74 + Math.random() * 0.24),
+                  chargeEnergy : clamp((burst.seed.chargeEnergy || 0.0) * (0.78 + Math.random() * 0.20), 0.0, 1.0),
                   cloudToGround : burst.seed.cloudToGround,
                   followUp : true
                 };
