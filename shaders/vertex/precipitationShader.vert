@@ -64,6 +64,8 @@ void main()
   newPos = dropPosition;
   newMass = mass;         // amount of water and ice carried
   newDensity = density;   // determines fall speed
+  feedback = vec4(0.0);
+  deposition = vec2(0.0);
 
   if (mass[WATER] < 0.) { // inactive
                           /*
@@ -249,6 +251,14 @@ void main()
 
       feedback[MASS] = totalMass;
 
+      // Charge separation tied directly to precipitation microphysics.
+      float mixedPhase = min(newMass[WATER], newMass[ICE]);
+      float updraft = clamp(base[VY] * 1200.0 + 0.5, 0.0, 1.0);
+      float turbulence = clamp(length(base.xy) * 80.0, 0.0, 1.0);
+      float chargeMagnitude = mixedPhase * (0.35 + turbulence * 0.65) * (0.45 + abs(updraft - 0.5) * 1.1);
+      float chargeSign = updraft > 0.5 ? 1.0 : -1.0;
+      feedback[CHARGE] += chargeSign * chargeMagnitude;
+
     }               // update
 
 #define pntSize 12. // 16.
@@ -257,13 +267,25 @@ void main()
     feedback[MASS] /= pntSurface;
     feedback[HEAT] /= pntSurface;
     feedback[VAPOR] /= pntSurface;
+    feedback[CHARGE] /= pntSurface;
 
     deposition[RAIN_DEPOSITION] /= pntSize; // only width matters because it's only applied at surface layer
     deposition[SNOW_DEPOSITION] /= pntSize; // only width matters because it's only applied at surface layer
 
-    gl_PointSize = pntSize;
+    // lightning candidate write to dedicated pixel(1,0) for extraction.
+    float lightningCharge = abs(feedback[CHARGE]) * (0.8 + feedback[MASS] * 4.5);
+    float lightningGate = random2d(vec2(newPos.x + iterNum * 0.007, newPos.y - iterNum * 0.013));
+    bool lightningCandidate = water[CLOUD] > 0.18 && lightningCharge > 0.08 && lightningGate < min(lightningCharge * 0.05, 0.12);
 
-    gl_Position = vec4(newPos, 0.0, 1.0);
+    if (lightningCandidate) {
+      float intensity = clamp(lightningCharge * 8.0, 0.4, 4.6);
+      gl_PointSize = 1.0;
+      gl_Position = vec4((((1.5) / resolution.x) * 2.0 - 1.0), (((0.5) / resolution.y) * 2.0 - 1.0), 0.0, 1.0);
+      feedback = vec4(texCoord.x, texCoord.y, iterNum, intensity);
+    } else {
+      gl_PointSize = pntSize;
+      gl_Position = vec4(newPos, 0.0, 1.0);
+    }
   } // active
 
   position_out = newPos;
