@@ -758,6 +758,98 @@
         .loading-orbit-one { width: 118px; height: 118px; }
         .loading-orbit-two { width: 84px; height: 84px; animation-direction: reverse; animation-duration: 3.5s; }
 
+        /* Opera GX-inspired visual theme */
+        :root {
+            --gx-bg: #10030a;
+            --gx-card: rgba(32, 8, 18, 0.88);
+            --gx-border: rgba(255, 59, 106, 0.45);
+            --gx-neon: #ff3b6a;
+            --gx-neon-soft: rgba(255, 59, 106, 0.35);
+            --gx-ink: #ffd9e6;
+        }
+
+        body::before {
+            background:
+                radial-gradient(circle at 15% 10%, rgba(255, 59, 106, 0.16), transparent 36%),
+                radial-gradient(circle at 90% 80%, rgba(117, 31, 212, 0.12), transparent 40%),
+                linear-gradient(160deg, rgba(12, 2, 8, 0.95), rgba(8, 3, 9, 0.92) 42%, rgba(2, 2, 8, 0.96));
+        }
+
+        .launch-deck,
+        .glass-card,
+        .sim-hud-card,
+        .loading-card,
+        .loading-side-card,
+        .launch-side-card {
+            background: var(--gx-card);
+            border: 1px solid var(--gx-border);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 26px var(--gx-neon-soft);
+        }
+
+        .launch-kicker,
+        .loading-eyebrow {
+            background: rgba(255, 59, 106, 0.16);
+            color: #ffbfd1;
+            border: 1px solid rgba(255, 59, 106, 0.28);
+        }
+
+        .simulation-hud.visible .sim-hud-card {
+            animation: gxCardIn 0.33s ease-out both;
+        }
+
+        .sim-hud-value,
+        .launch-title,
+        .loading-percent {
+            color: var(--gx-ink);
+            text-shadow: 0 0 14px rgba(255, 59, 106, 0.35);
+        }
+
+        .dg.ac {
+            z-index: 6 !important;
+        }
+
+        .dg.main {
+            border: 1px solid var(--gx-border);
+            box-shadow: 0 0 28px rgba(255, 59, 106, 0.26);
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(10, 4, 8, 0.86) !important;
+            animation: gxCardIn 0.28s ease-out;
+        }
+
+        .dg.main .close-button,
+        .dg .cr.number input[type="text"],
+        .dg .c select,
+        .dg .c input[type="text"] {
+            color: #ffd6e5 !important;
+            background: rgba(28, 8, 16, 0.88) !important;
+            border-color: rgba(255, 59, 106, 0.45) !important;
+        }
+
+        .dg li {
+            background: rgba(18, 6, 12, 0.88) !important;
+            border-bottom: 1px solid rgba(255, 59, 106, 0.14) !important;
+            transition: background-color 140ms ease, box-shadow 180ms ease;
+        }
+
+        .dg li:hover {
+            background: rgba(44, 11, 23, 0.95) !important;
+            box-shadow: inset 0 0 0 1px rgba(255, 59, 106, 0.28);
+        }
+
+        .dg .c .slider {
+            background: rgba(45, 14, 23, 0.9) !important;
+        }
+
+        .dg .c .slider-fg {
+            background: linear-gradient(90deg, #ff4d7d, #ba39ff) !important;
+        }
+
+        @keyframes gxCardIn {
+            from { opacity: 0; transform: translateY(6px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
         .loading-core {
             width: 22px;
             height: 22px;

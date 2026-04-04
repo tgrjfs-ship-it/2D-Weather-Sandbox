@@ -580,7 +580,13 @@ function chargeGridIndex(x, y) { return y * chargeGridW + x; }
 function ensureChargeOverlayCanvas()
 {
   if (chargeRenderOverlay)
+  {
+    if (chargeRenderOverlay.canvas.width != window.innerWidth || chargeRenderOverlay.canvas.height != window.innerHeight) {
+      chargeRenderOverlay.canvas.width = window.innerWidth;
+      chargeRenderOverlay.canvas.height = window.innerHeight;
+    }
     return chargeRenderOverlay;
+  }
 
   const overlayCanvas = document.createElement('canvas');
   overlayCanvas.id = 'chargeOverlayCanvas';
@@ -681,18 +687,19 @@ function updateChargeParticlesFromGrid(currentIter)
     const nextGy = clamp(Math.floor(p.y * chargeGridH), 0, chargeGridH - 1);
     const nextIdx = chargeGridIndex(nextGx, nextGy);
     const cloudMask = chargeGridCloudMask ? chargeGridCloudMask[nextIdx] : 1.0;
+    let removeParticle = false;
     if (cloudMask < cloudLockThreshold) {
       const cloudCell = findCloudCell(nextGx, nextGy);
       if (cloudCell) {
         p.x = mod((cloudCell.x + 0.15 + Math.random() * 0.7) / chargeGridW, 1.0);
         p.y = (cloudCell.y + 0.20 + Math.random() * 0.6) / chargeGridH;
       } else {
-        p.strength = 0.0;
+        removeParticle = true;
       }
       p.vx *= 0.35;
       p.vy *= 0.35;
     }
-    p.strength = Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
+    p.strength = removeParticle ? 0.0 : Math.max(0.05, Math.min((polarity > 0 ? pLocal : nLocal), 6.0));
     p.column = gx;
     p.age += 1;
   };
@@ -7153,17 +7160,22 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 let curveX = Math.cos(theta) * burst.arcRadiusX;
                 let curveY = Math.sin(theta) * burst.arcRadiusY;
                 let spread = burst.seed.cloudToGround ? 0.006 : 0.012;
+                if (isIC) {
+                  const waviness = 0.004 + burst.arcRadiusX * 0.12;
+                  curveX += Math.sin(theta * 2.7 + burst.arcPhase * 0.8) * waviness;
+                  curveY += Math.cos(theta * 1.9 + burst.arcPhase * 0.6) * waviness * 0.7;
+                }
                 if (burst.seed.cloudToGround) {
                   const branchDepth = burst.branchDepth || 0.82;
                   const descent = (0.02 + progressT * branchDepth) * (0.75 + Math.random() * 0.55);
                   curveY -= descent;
-                  curveX += burst.arcDirection * progressT * (burst.branchSpread || 0.008);
-                  spread = 0.010;
+                  curveX += burst.arcDirection * progressT * (burst.branchSpread || 0.008) * 1.55;
+                  spread = 0.022;
                 }
                 const followUpStrike = {
                   x : mod(burst.seed.x + curveX + (Math.random() - 0.5) * spread + 1.0, 1.0),
                   y : clamp(burst.seed.y + curveY + (Math.random() - 0.5) * spread * (isIC ? 0.85 : 0.45), 0.03, 0.95),
-                  intensity : burst.seed.intensity * (0.72 + Math.random() * 0.20),
+                  intensity : burst.seed.intensity * (burst.seed.cloudToGround ? (0.84 + Math.random() * 0.30) : (0.72 + Math.random() * 0.20)),
                   chargeContrast : burst.seed.chargeContrast * (0.74 + Math.random() * 0.24),
                   cloudToGround : burst.seed.cloudToGround,
                   followUp : true
