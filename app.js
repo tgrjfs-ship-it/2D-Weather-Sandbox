@@ -1020,6 +1020,8 @@ const guiControls_default = {
   auto_IterPerFrame : true,
   sound : true,
   enableCameraShake : true,
+  cameraShakeStrength : 1.0,
+  cameraShakeDecay : 0.92,
   precipitationChargeCoupling : 0.75,
   lightningEvaporationFeedback : 0.35,
   showCharges : true,
@@ -2078,6 +2080,10 @@ class LoadingBar
     this.phaseRail.className = 'loading-phase-rail';
     card.appendChild(this.phaseRail);
 
+    this.telemetryRail = document.createElement('div');
+    this.telemetryRail.className = 'loading-telemetry-rail';
+    card.appendChild(this.telemetryRail);
+
     const sidePanel = document.createElement('div');
     sidePanel.className = 'loading-side-panel';
     content.appendChild(sidePanel);
@@ -2160,6 +2166,15 @@ class LoadingBar
         item.className = 'loading-meta-item';
         item.innerHTML = '<span>' + label + '</span><strong>' + value + '</strong>';
         this.metaGrid.appendChild(item);
+      });
+
+      this.telemetryRail.innerHTML = '';
+      [ 'CPU', 'GPU', 'SIM', 'I/O' ].forEach((label, index) => {
+        const value = Math.max(5, Math.min(100, Math.round(safePercent * (0.72 + index * 0.11))));
+        const meter = document.createElement('div');
+        meter.className = 'loading-telemetry-item';
+        meter.innerHTML = '<span>' + label + '</span><div class="loading-telemetry-track"><div class="loading-telemetry-fill" style="width:' + value + '%"></div></div>';
+        this.telemetryRail.appendChild(meter);
       });
 
       setTimeout(resolve, 5);
@@ -2297,7 +2312,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     triggerShake(intensity, randomOffsetScale = 1.0)
     {
-      const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.6), 0.0, 4.6, 0.0038, 0.034);
+      const shakeStrength = guiControls ? clamp(guiControls.cameraShakeStrength, 0.2, 3.0) : 1.0;
+      const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.6), 0.0, 4.6, 0.0038, 0.034) * shakeStrength;
       this.#shakeAmplitude = Math.max(this.#shakeAmplitude, baseAmplitude);
       this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * baseAmplitude * 1.55 * randomOffsetScale;
       this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * baseAmplitude * sim_aspect * 1.55 * randomOffsetScale;
@@ -2317,7 +2333,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
           this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * 1.35;
           this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect * 1.35;
         }
-        this.#shakeAmplitude *= 0.92;
+        const shakeDecay = guiControls ? clamp(guiControls.cameraShakeDecay, 0.80, 0.98) : 0.92;
+        this.#shakeAmplitude *= shakeDecay;
       }
 
       this.renderXpos = this.curXpos + this.#shakeOffsetX;
@@ -4675,6 +4692,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       }
     });
     advanced_folder.add(guiControls, 'enableCameraShake').name('Camera Shake');
+    advanced_folder.add(guiControls, 'cameraShakeStrength', 0.2, 3.0, 0.05).name('Shake Strength');
+    advanced_folder.add(guiControls, 'cameraShakeDecay', 0.80, 0.98, 0.005).name('Shake Decay');
 
     advanced_folder.add(guiControls, 'resetSettings').name('Reset all settings');
 
@@ -6675,6 +6694,59 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   setInterval(calcFps, 1000); // log fps
   requestAnimationFrame(draw);
 
+  function buildIcLightningStructure(seed)
+  {
+    const points = [];
+    const stepCount = 4 + Math.floor(Math.random() * 4);
+    const heading = (Math.random() < 0.5 ? -1.0 : 1.0) * (0.030 + Math.random() * 0.055);
+    const baseY = (Math.random() - 0.5) * 0.045;
+    for (let i = 1; i <= stepCount; i++) {
+      const t = i / stepCount;
+      const wave = Math.sin(t * Math.PI * (1.8 + Math.random() * 1.6)) * (0.008 + Math.random() * 0.009);
+      points.push({
+        x : mod(seed.x + heading * t + wave + 1.0, 1.0),
+        y : clamp(seed.y + baseY * t + Math.cos(t * Math.PI * 1.4) * 0.010, 0.04, 0.95),
+        intensityScale : 0.70 + (1.0 - t) * 0.22,
+        contrastScale : 0.72 + (1.0 - t) * 0.20,
+        energyScale : 0.84 + (1.0 - t) * 0.14
+      });
+    }
+    return points;
+  }
+
+  function buildCgLightningStructure(seed)
+  {
+    const points = [];
+    const leaderSteps = 5 + Math.floor(Math.random() * 3);
+    const groundY = 0.035 + Math.random() * 0.018;
+    const baseX = seed.x;
+    const baseY = seed.y;
+
+    for (let i = 1; i <= leaderSteps; i++) {
+      const t = i / leaderSteps;
+      const jitterX = (Math.random() - 0.5) * (0.010 + t * 0.018);
+      points.push({
+        x : mod(baseX + jitterX + 1.0, 1.0),
+        y : clamp(baseY + (groundY - baseY) * t, groundY, 0.95),
+        intensityScale : 0.88 + (1.0 - t) * 0.18,
+        contrastScale : 0.86 + (1.0 - t) * 0.12,
+        energyScale : 0.92 + (1.0 - t) * 0.08
+      });
+      if (i >= 2 && i < leaderSteps - 1 && Math.random() < 0.55) {
+        const branchDir = Math.random() < 0.5 ? -1.0 : 1.0;
+        const branchLen = 0.010 + Math.random() * 0.028;
+        points.push({
+          x : mod(baseX + jitterX + branchDir * branchLen + 1.0, 1.0),
+          y : clamp(baseY + (groundY - baseY) * t + (Math.random() - 0.5) * 0.015, groundY, 0.95),
+          intensityScale : 0.72 + Math.random() * 0.12,
+          contrastScale : 0.74 + Math.random() * 0.14,
+          energyScale : 0.78 + Math.random() * 0.16
+        });
+      }
+    }
+    return points;
+  }
+
   function emitLightningStrike(chargeStrike)
   {
     const lightningDataValues = new Float32Array([
@@ -6702,45 +6774,14 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     if (guiControls.sound)
       soundSystem.soundThunder(chargeStrike.x, chargeStrike.y, lightningIntensity);
 
-    if (!chargeStrike.followUp && Math.random() < 0.85) {
-      const burstCount = 1 + Math.floor(Math.random() * 4);
-      const isIC = !chargeStrike.cloudToGround;
-      const arcDirection = Math.random() < 0.5 ? -1.0 : 1.0;
-      const arcRadiusX = isIC ? (0.020 + Math.random() * 0.030) : (0.004 + Math.random() * 0.010);
-      const arcRadiusY = isIC ? (0.010 + Math.random() * 0.018) : (0.003 + Math.random() * 0.008);
-      const arcCurve = isIC ? (0.55 + Math.random() * 0.95) : (0.30 + Math.random() * 0.55);
+    if (!chargeStrike.followUp && Math.random() < 0.9) {
+      const structurePoints = chargeStrike.cloudToGround ? buildCgLightningStructure(chargeStrike) : buildIcLightningStructure(chargeStrike);
       pendingLightningBursts.push({
-        remaining : burstCount - 1,
         nextIter : iterNum + 2,
         seed : {...chargeStrike},
-        total : burstCount,
-        arcDirection,
-        arcRadiusX,
-        arcRadiusY,
-        arcCurve,
-        arcPhase : Math.random() * Math.PI * 2.0,
-        arcProgress : 0
+        points : structurePoints,
+        cursor : 0
       });
-
-      if (chargeStrike.cloudToGround) {
-        const branchCount = 2 + Math.floor(Math.random() * 3);
-        for (let branch = 0; branch < branchCount; branch++) {
-          pendingLightningBursts.push({
-            remaining : 1 + Math.floor(Math.random() * 2),
-            total : 2,
-            nextIter : iterNum + 1 + branch,
-            seed : {...chargeStrike},
-            arcDirection : Math.random() < 0.5 ? -1.0 : 1.0,
-            arcRadiusX : 0.010 + Math.random() * 0.020,
-            arcRadiusY : 0.010 + Math.random() * 0.015,
-            arcCurve : 0.90 + Math.random() * 0.90,
-            arcPhase : -Math.PI * 0.5 + (Math.random() - 0.5) * 0.7,
-            arcProgress : 0,
-            branchDepth : 0.55 + Math.random() * 0.35,
-            branchSpread : 0.015 + Math.random() * 0.028
-          });
-        }
-      }
     }
   }
 
@@ -6758,6 +6799,18 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       chargeParticleData[base + 1] = p.y;
       chargeParticleData[base + 2] = sign;
       count++;
+      if (guiControls.wrapHorizontally && count + 2 < maxChargeRenderParticles) {
+        const left = count * 3;
+        chargeParticleData[left + 0] = p.x - 1.0;
+        chargeParticleData[left + 1] = p.y;
+        chargeParticleData[left + 2] = sign;
+        count++;
+        const right = count * 3;
+        chargeParticleData[right + 0] = p.x + 1.0;
+        chargeParticleData[right + 1] = p.y;
+        chargeParticleData[right + 2] = sign;
+        count++;
+      }
     };
 
     for (let i = 0; i < chargeParticlesPositive.length; i++)
@@ -7082,40 +7135,25 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 const burst = pendingLightningBursts[b];
                 if (iterNum < burst.nextIter)
                   continue;
-
-                burst.arcProgress += 1;
-                const isIC = !burst.seed.cloudToGround;
-                const progressT = clamp((burst.arcProgress + Math.random() * 0.25) / Math.max(burst.total, 1.0), 0.0, 1.0);
-                const theta = burst.arcPhase + burst.arcDirection * progressT * Math.PI * burst.arcCurve;
-                let curveX = Math.cos(theta) * burst.arcRadiusX;
-                let curveY = Math.sin(theta) * burst.arcRadiusY;
-                let spread = burst.seed.cloudToGround ? 0.006 : 0.012;
-                if (isIC) {
-                  const waviness = 0.004 + burst.arcRadiusX * 0.12;
-                  curveX += Math.sin(theta * 2.7 + burst.arcPhase * 0.8) * waviness;
-                  curveY += Math.cos(theta * 1.9 + burst.arcPhase * 0.6) * waviness * 0.7;
-                }
-                if (burst.seed.cloudToGround) {
-                  const branchDepth = burst.branchDepth || 0.82;
-                  const descent = (0.02 + progressT * branchDepth) * (0.75 + Math.random() * 0.55);
-                  curveY -= descent;
-                  curveX += burst.arcDirection * progressT * (burst.branchSpread || 0.008) * 1.55;
-                  spread = 0.022;
+                const point = burst.points[burst.cursor];
+                if (!point) {
+                  pendingLightningBursts.splice(b, 1);
+                  continue;
                 }
                 const followUpStrike = {
-                  x : mod(burst.seed.x + curveX + (Math.random() - 0.5) * spread + 1.0, 1.0),
-                  y : clamp(burst.seed.y + curveY + (Math.random() - 0.5) * spread * (isIC ? 0.85 : 0.45), 0.03, 0.95),
-                  intensity : burst.seed.intensity * (burst.seed.cloudToGround ? (0.84 + Math.random() * 0.30) : (0.72 + Math.random() * 0.20)),
-                  chargeContrast : burst.seed.chargeContrast * (0.74 + Math.random() * 0.24),
-                  chargeEnergy : clamp((burst.seed.chargeEnergy || 0.0) * (0.78 + Math.random() * 0.20), 0.0, 1.0),
+                  x : point.x,
+                  y : point.y,
+                  intensity : burst.seed.intensity * point.intensityScale,
+                  chargeContrast : burst.seed.chargeContrast * point.contrastScale,
+                  chargeEnergy : clamp((burst.seed.chargeEnergy || 0.0) * point.energyScale, 0.0, 1.0),
                   cloudToGround : burst.seed.cloudToGround,
                   followUp : true
                 };
                 emitLightningStrike(followUpStrike);
 
-                burst.remaining -= 1;
-                burst.nextIter = iterNum + 2 + Math.floor(Math.random() * 2);
-                if (burst.remaining <= 0)
+                burst.cursor += 1;
+                burst.nextIter = iterNum + 1;
+                if (burst.cursor >= burst.points.length)
                   pendingLightningBursts.splice(b, 1);
               }
             }

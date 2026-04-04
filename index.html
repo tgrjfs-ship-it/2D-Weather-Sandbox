@@ -932,7 +932,44 @@
             height: 100%;
             width: 0%;
             border-radius: inherit;
-            background: linear-gradient(90deg, #3d90ff, #7ecbff, #9ee6ff);
+            background: linear-gradient(90deg, #ff4d7d, #ba39ff, #7a5bff);
+            transition: width 0.18s ease;
+        }
+
+        .loading-telemetry-rail {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .loading-telemetry-item {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255, 59, 106, 0.22);
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        .loading-telemetry-item span {
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255, 214, 229, 0.85);
+        }
+
+        .loading-telemetry-track {
+            margin-top: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+
+        .loading-telemetry-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #ff3b6a, #ff7b9a);
+            box-shadow: 0 0 10px rgba(255, 59, 106, 0.5);
             transition: width 0.18s ease;
         }
 
