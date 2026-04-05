@@ -359,6 +359,9 @@ var chargeGridWindY = null;
 var chargeGroundTargetWeight = null;
 var chargeGridCloudMask = null;
 var pendingLightningBursts = [];
+var lastChargeAccumIter = -1;
+var lastCloudScanIter = -1;
+var lastPrecipStrikeIter = -100;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -1029,6 +1032,12 @@ const guiControls_default = {
   cameraShakeStrength : 1.0,
   cameraShakeDecay : 0.92,
   precipitationChargeCoupling : 0.75,
+  chargeAccumulationRate : 0.018,
+  chargeDecayRate : 0.992,
+  chargeVisualDensity : 1.0,
+  chargePolarityBias : 0.0,
+  chargePerformanceMode : true,
+  lightningCooldownIter : 2,
   lightningEvaporationFeedback : 0.35,
   showCharges : true,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
@@ -4700,6 +4709,12 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     advanced_folder.add(guiControls, 'enableCameraShake').name('Camera Shake');
     advanced_folder.add(guiControls, 'cameraShakeStrength', 0.2, 3.0, 0.05).name('Shake Strength');
     advanced_folder.add(guiControls, 'cameraShakeDecay', 0.80, 0.98, 0.005).name('Shake Decay');
+    advanced_folder.add(guiControls, 'chargeAccumulationRate', 0.001, 0.08, 0.001).name('Charge Build-up');
+    advanced_folder.add(guiControls, 'chargeDecayRate', 0.94, 0.999, 0.001).name('Charge Decay');
+    advanced_folder.add(guiControls, 'chargeVisualDensity', 0.2, 2.0, 0.05).name('Charge Density');
+    advanced_folder.add(guiControls, 'chargePolarityBias', -0.5, 0.5, 0.01).name('Charge Polarity Bias');
+    advanced_folder.add(guiControls, 'chargePerformanceMode').name('Charge Performance Mode');
+    advanced_folder.add(guiControls, 'lightningCooldownIter', 1, 8, 1).name('Lightning Cooldown');
 
     advanced_folder.add(guiControls, 'resetSettings').name('Reset all settings');
 
@@ -5150,6 +5165,41 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     cachedChargeSources = sources;
     lastChargeSourceScanIter = currentIter;
     return cachedChargeSources;
+  }
+
+  function accumulateCloudChargesFromMask(currentIter)
+  {
+    if (!chargeGridPositive || !chargeGridNegative || !chargeGridCloudMask)
+      initChargeSeparationGrid();
+
+    if (lastChargeAccumIter == currentIter)
+      return;
+    lastChargeAccumIter = currentIter;
+
+    const accumRate = clamp(guiControls.chargeAccumulationRate, 0.001, 0.08);
+    const decay = clamp(guiControls.chargeDecayRate, 0.94, 0.9995);
+    const polarityBias = clamp(guiControls.chargePolarityBias, -0.5, 0.5);
+    const cap = 8.0;
+
+    for (let y = 0; y < chargeGridH; y++) {
+      const yNorm = y / Math.max(chargeGridH - 1, 1);
+      const positiveFavored = clamp((yNorm - 0.5) * 1.35 + 0.5 + polarityBias, 0.05, 0.95);
+      const negativeFavored = 1.0 - positiveFavored;
+      for (let x = 0; x < chargeGridW; x++) {
+        const idx = chargeGridIndex(x, y);
+        const cloud = chargeGridCloudMask[idx];
+        chargeGridPositive[idx] = clamp(chargeGridPositive[idx] * decay, 0.0, cap);
+        chargeGridNegative[idx] = clamp(chargeGridNegative[idx] * decay, 0.0, cap);
+        if (cloud < 0.10)
+          continue;
+
+        const seed = Math.sin((x * 12.73 + y * 38.91 + currentIter * 0.013) * 0.97) * 43758.5453;
+        const jitter = (seed - Math.floor(seed)) * 0.25 + 0.88;
+        const add = cloud * accumRate * jitter;
+        chargeGridPositive[idx] = clamp(chargeGridPositive[idx] + add * positiveFavored, 0.0, cap);
+        chargeGridNegative[idx] = clamp(chargeGridNegative[idx] + add * negativeFavored, 0.0, cap);
+      }
+    }
   }
 
 
@@ -6793,6 +6843,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function pollPrecipitationLightning()
   {
+    if (iterNum - lastPrecipStrikeIter < Math.max(1, Math.round(guiControls.lightningCooldownIter)))
+      return null;
+
     gl.viewport(0, 0, 1, 1);
     gl.useProgram(lightningLocationProgram);
     gl.activeTexture(gl.TEXTURE0);
@@ -6836,7 +6889,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       chargeParticlesPositive.length = 0;
       chargeParticlesNegative.length = 0;
-      const targetPerSign = 110;
+      const densityMult = clamp(guiControls.chargeVisualDensity, 0.2, 2.0);
+      const perfMult = guiControls.chargePerformanceMode ? 0.65 : 1.0;
+      const targetPerSign = Math.max(24, Math.floor(110 * densityMult * perfMult));
       let scanned = 0;
       let cursorX = Math.floor((iterNum * 1.7) % chargeGridW);
       let cursorY = Math.floor((iterNum * 2.1) % chargeGridH);
@@ -6846,15 +6901,17 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         const y = (cursorY + scanned * 7) % chargeGridH;
         const idx = chargeGridIndex(x, y);
         const mask = chargeGridCloudMask[idx];
+        const pCharge = chargeGridPositive ? chargeGridPositive[idx] : mask;
+        const nCharge = chargeGridNegative ? chargeGridNegative[idx] : mask;
         scanned++;
-        if (mask < 0.16)
+        if (mask < 0.16 || (pCharge < 0.04 && nCharge < 0.04))
           continue;
 
         const isUpperCloud = y > chargeGridH * 0.52;
         const particle = {
           x : (x + 0.2 + Math.random() * 0.6) / chargeGridW,
           y : (y + 0.2 + Math.random() * 0.6) / chargeGridH,
-          strength : mask
+          strength : isUpperCloud ? pCharge : nCharge
         };
         if (isUpperCloud) {
           if (chargeParticlesPositive.length < targetPerSign)
@@ -7199,10 +7256,17 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
-              collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.3)));
+              const cloudScanInterval = guiControls.chargePerformanceMode ? 2 : 1;
+              if (iterNum - lastCloudScanIter >= cloudScanInterval) {
+                collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.3)));
+                lastCloudScanIter = iterNum;
+              }
+              accumulateCloudChargesFromMask(iterNum);
               const precipStrike = pollPrecipitationLightning();
-              if (precipStrike)
+              if (precipStrike) {
                 emitLightningStrike(precipStrike);
+                lastPrecipStrikeIter = iterNum;
+              }
 
               for (let b = pendingLightningBursts.length - 1; b >= 0; b--) {
                 const burst = pendingLightningBursts[b];
