@@ -92,7 +92,13 @@ float calcWaterEvaporation(float T, float W, float sunlight, vec2 velocity)
   return humidityDeficit * waterEvaporation * temperatureResponse * solarResponse * windResponse;
 }
 
-float calcFireIntensity(int veg, float moist, float precip) { return max(float(veg) * 0.00025 - moist * 0.00020 - precip * 0.02, 0.); }
+float calcFireIntensity(int veg, float moist, float precip)
+{
+  float fuel = max(float(veg) * 0.00022, 0.0);
+  float moistureSuppression = moist * 0.00026;
+  float precipSuppression = precip * 0.03;
+  return max(fuel - moistureSuppression - precipSuppression, 0.0);
+}
 
 void main()
 {
@@ -496,7 +502,7 @@ void main()
 
           // dynamic vegetation
 
-          int vegetationGrowthRate = int(water[SOIL_MOISTURE] * sqrt(lightAboveSurface[SUNLIGHT]) * 0.01);
+          int vegetationGrowthRate = int(clamp(water[SOIL_MOISTURE] * sqrt(lightAboveSurface[SUNLIGHT]) * 0.007, 0.0, 6.0));
 
           if (vegetationGrowthRate > 0 && int(iterNum) % ((100 / vegetationGrowthRate) * 100) == 0) {      // growth interval
             if (int(map_rangeC(realTempAboveSurface, CtoK(0.0), CtoK(25.0), 0., 127.)) > wall[VEGETATION]) // limit vegetation growth at lower temperatures

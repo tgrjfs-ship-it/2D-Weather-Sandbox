@@ -359,9 +359,6 @@ var chargeGridWindY = null;
 var chargeGroundTargetWeight = null;
 var chargeGridCloudMask = null;
 var pendingLightningBursts = [];
-var lastChargeAccumIter = -1;
-var lastCloudScanIter = -1;
-var lastPrecipStrikeIter = -100;
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -422,12 +419,7 @@ var simulationHudHideTimer = null;
 
 function setSimulationHudVisibility(visible)
 {
-  const hud = ensureSimulationHud();
-  hud.shell.style.display = visible ? 'grid' : 'none';
-  hud.shell.hidden = !visible;
-  hud.shell.classList.toggle('is-hidden', !visible);
-  if (!visible)
-    hud.shell.classList.remove('visible');
+  return;
 }
 
 function animateUiElement(element, className = 'ui-pulse')
@@ -444,85 +436,18 @@ function ensureSimulationHud()
 {
   if (simulationHud)
     return simulationHud;
-
-  const shell = document.createElement('div');
-  shell.id = 'simulationHud';
-  shell.className = 'simulation-hud';
-  shell.innerHTML = `
-    <div class="sim-hud-card sim-hud-primary">
-      <span class="sim-hud-label">Simulation Controls</span>
-      <strong class="sim-hud-value" data-hud-field="displayMode">Temperature</strong>
-      <p class="sim-hud-hints" data-hud-field="tool">Tool: Flashlight</p>
-    </div>
-    <div class="sim-hud-grid">
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Visual Toggles</span>
-        <strong class="sim-hud-value" data-hud-field="visuals">Vectors Off · Drops Off</strong>
-        <p class="sim-hud-hints">Tab vectors · D droplets.</p>
-      </div>
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Stations & Tools</span>
-        <strong class="sim-hud-value" data-hud-field="observers">Stations Hidden</strong>
-        <p class="sim-hud-hints" data-hud-field="controls">N station visibility · M station tool.</p>
-      </div>
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Lightning Links</span>
-        <strong class="sim-hud-value" data-hud-field="lightning">Awaiting strike</strong>
-        <p class="sim-hud-hints">+ / - links fire IC chains. Ground leaders rise slowly before CG discharge.</p>
-      </div>
-    </div>`;
-
-  document.body.appendChild(shell);
-  simulationHud = {
-    shell,
-    displayMode : shell.querySelector('[data-hud-field="displayMode"]'),
-    tool : shell.querySelector('[data-hud-field="tool"]'),
-    visuals : shell.querySelector('[data-hud-field="visuals"]'),
-    observers : shell.querySelector('[data-hud-field="observers"]'),
-    lightning : shell.querySelector('[data-hud-field="lightning"]'),
-    controls : shell.querySelector('[data-hud-field="controls"]')
-  };
-
+  simulationHud = {shell : null};
   return simulationHud;
 }
 
 function showSimulationHudPulse()
 {
-  const hud = ensureSimulationHud();
-  if (!guiControls?.showSimulationHud)
-    return;
-
-  hud.shell.classList.add('visible');
-  animateUiElement(hud.shell, 'ui-pulse');
-  clearTimeout(simulationHudHideTimer);
-  simulationHudHideTimer = setTimeout(() => {
-    hud.shell.classList.remove('visible');
-  }, 2200);
+  return;
 }
 
 function updateSimulationHud()
 {
-  if (SETUP_MODE || !guiControls)
-    return;
-
-  const hud = ensureSimulationHud();
-  setSimulationHudVisibility(guiControls.showSimulationHud);
-  if (!guiControls.showSimulationHud)
-    return;
-  const displayLabel = displayModeLabels[guiControls.displayMode] || guiControls.displayMode || 'Temperature';
-  const toolLabel = toolLabels[guiControls.tool] || guiControls.tool || 'Flashlight';
-  const weatherStationCount = weatherStations.length;
-  const lightningSummary = latestLightningPos && currentLightningProfile ? Math.round(currentLightningProfile.temperature) + ' K strike' : 'Awaiting strike';
-
-  hud.displayMode.textContent = displayLabel;
-  hud.tool.textContent = 'Tool: ' + toolLabel;
-  hud.visuals.textContent = 'Vectors ' + (guiControls.showWindVectors ? 'On' : 'Off') + ' · Drops ' + (guiControls.showDrops ? 'On' : 'Off');
-  hud.observers.textContent = weatherStationCount + ' station' + (weatherStationCount == 1 ? '' : 's') + ' · ' + (guiControls.showWeatherStations ? 'Visible' : 'Hidden');
-  hud.lightning.textContent = lightningSummary;
-  hud.controls.textContent = 'Controls: N stations · M station tool · Active tool ' + toolLabel + '.';
-  hud.shell.classList.toggle('compact', !guiControls.showWindVectors && !guiControls.showWeatherStations);
-
-  showSimulationHudPulse();
+  return;
 }
 
 function setWindVectorVisibility(visible)
@@ -1018,7 +943,7 @@ const guiControls_default = {
   brushIntensity : 0.01,
   allowCaves : true,
   showGraph : false,
-  showSimulationHud : true,
+  showSimulationHud : false,
   showWindVectors : false,
   showWeatherStations : true,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
@@ -1032,12 +957,6 @@ const guiControls_default = {
   cameraShakeStrength : 1.0,
   cameraShakeDecay : 0.92,
   precipitationChargeCoupling : 0.75,
-  chargeAccumulationRate : 0.018,
-  chargeDecayRate : 0.992,
-  chargeVisualDensity : 1.0,
-  chargePolarityBias : 0.0,
-  chargePerformanceMode : true,
-  lightningCooldownIter : 2,
   lightningEvaporationFeedback : 0.35,
   showCharges : false,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
@@ -4631,7 +4550,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'SmoothCam').onChange(function() { cam.smooth = guiControls.SmoothCam; }).name('Smooth Camera');
 
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
-    display_folder.add(guiControls, 'showSimulationHud').onChange(function() { setSimulationHudVisibility(guiControls.showSimulationHud); updateSimulationHud(); }).name('Show Simulation HUD').listen();
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
@@ -4709,13 +4627,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     advanced_folder.add(guiControls, 'enableCameraShake').name('Camera Shake');
     advanced_folder.add(guiControls, 'cameraShakeStrength', 0.2, 3.0, 0.05).name('Shake Strength');
     advanced_folder.add(guiControls, 'cameraShakeDecay', 0.80, 0.98, 0.005).name('Shake Decay');
-    advanced_folder.add(guiControls, 'chargeAccumulationRate', 0.001, 0.08, 0.001).name('Charge Build-up');
-    advanced_folder.add(guiControls, 'chargeDecayRate', 0.94, 0.999, 0.001).name('Charge Decay');
-    advanced_folder.add(guiControls, 'chargeVisualDensity', 0.2, 2.0, 0.05).name('Charge Density');
-    advanced_folder.add(guiControls, 'chargePolarityBias', -0.5, 0.5, 0.01).name('Charge Polarity Bias');
-    advanced_folder.add(guiControls, 'chargePerformanceMode').name('Charge Performance Mode');
-    advanced_folder.add(guiControls, 'lightningCooldownIter', 1, 8, 1).name('Lightning Cooldown');
-
     advanced_folder.add(guiControls, 'resetSettings').name('Reset all settings');
 
     datGui.add(guiControls, 'paused').onChange(handlePause).name('Paused').listen();
@@ -5166,42 +5077,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     lastChargeSourceScanIter = currentIter;
     return cachedChargeSources;
   }
-
-  function accumulateCloudChargesFromMask(currentIter)
-  {
-    if (!chargeGridPositive || !chargeGridNegative || !chargeGridCloudMask)
-      initChargeSeparationGrid();
-
-    if (lastChargeAccumIter == currentIter)
-      return;
-    lastChargeAccumIter = currentIter;
-
-    const accumRate = clamp(guiControls.chargeAccumulationRate, 0.001, 0.08);
-    const decay = clamp(guiControls.chargeDecayRate, 0.94, 0.9995);
-    const polarityBias = clamp(guiControls.chargePolarityBias, -0.5, 0.5);
-    const cap = 8.0;
-
-    for (let y = 0; y < chargeGridH; y++) {
-      const yNorm = y / Math.max(chargeGridH - 1, 1);
-      const positiveFavored = clamp((yNorm - 0.5) * 1.35 + 0.5 + polarityBias, 0.05, 0.95);
-      const negativeFavored = 1.0 - positiveFavored;
-      for (let x = 0; x < chargeGridW; x++) {
-        const idx = chargeGridIndex(x, y);
-        const cloud = chargeGridCloudMask[idx];
-        chargeGridPositive[idx] = clamp(chargeGridPositive[idx] * decay, 0.0, cap);
-        chargeGridNegative[idx] = clamp(chargeGridNegative[idx] * decay, 0.0, cap);
-        if (cloud < 0.10)
-          continue;
-
-        const seed = Math.sin((x * 12.73 + y * 38.91 + currentIter * 0.013) * 0.97) * 43758.5453;
-        const jitter = (seed - Math.floor(seed)) * 0.25 + 0.88;
-        const add = cloud * accumRate * jitter;
-        chargeGridPositive[idx] = clamp(chargeGridPositive[idx] + add * positiveFavored, 0.0, cap);
-        chargeGridNegative[idx] = clamp(chargeGridNegative[idx] + add * negativeFavored, 0.0, cap);
-      }
-    }
-  }
-
 
   function logSample()
   {
@@ -6843,9 +6718,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function pollPrecipitationLightning()
   {
-    if (iterNum - lastPrecipStrikeIter < Math.max(1, Math.round(guiControls.lightningCooldownIter)))
-      return null;
-
     gl.viewport(0, 0, 1, 1);
     gl.useProgram(lightningLocationProgram);
     gl.activeTexture(gl.TEXTURE0);
@@ -6862,8 +6734,30 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
     const strikeIter = Math.round(strikeSample[2]);
     const intensity = strikeSample[3];
-    if (strikeIter < iterNum - 1 || strikeIter > iterNum || intensity < 0.35)
-      return null;
+    if (strikeIter < iterNum - 1 || strikeIter > iterNum || intensity < 0.35) {
+      const cloudSources = collectChargeSources(iterNum, 14);
+      let best = null;
+      let bestScore = 0.0;
+      for (let i = 0; i < cloudSources.length; i++) {
+        const source = cloudSources[i];
+        const score = source.cloudDensity * (0.45 + source.updraft * 0.95) + source.precipitationLoading * 0.0025;
+        if (score > bestScore) {
+          bestScore = score;
+          best = source;
+        }
+      }
+      if (!best || bestScore < 0.22 || Math.random() > Math.min(bestScore * 0.22, 0.24))
+        return null;
+
+      return {
+        x : clamp(best.x, 0.0, 1.0),
+        y : clamp(best.y, 0.06, 0.95),
+        intensity : clamp(0.5 + bestScore * 3.2, 0.4, 4.2),
+        chargeContrast : clamp(0.55 + bestScore * 2.1, 0.4, 4.5),
+        chargeEnergy : clamp(bestScore * 0.55, 0.0, 1.0),
+        cloudToGround : best.y < 0.32 || best.updraft < 0.28
+      };
+    }
 
     const x = clamp(strikeSample[0], 0.0, 1.0);
     const y = clamp(strikeSample[1], 0.03, 0.95);
@@ -7185,7 +7079,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               const precipStrike = pollPrecipitationLightning();
               if (precipStrike) {
                 emitLightningStrike(precipStrike);
-                lastPrecipStrikeIter = iterNum;
               }
 
               for (let b = pendingLightningBursts.length - 1; b >= 0; b--) {

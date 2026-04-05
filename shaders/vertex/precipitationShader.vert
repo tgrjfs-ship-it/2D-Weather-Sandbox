@@ -177,7 +177,7 @@ void main()
 
       // growthRate = 0.0;                                                                                                                  // for debug
 
-      float growth = water[CLOUD] * growthRate * surfaceArea;
+      float growth = water[CLOUD] * growthRate * surfaceArea * (0.85 + min(abs(base[VY]) * 900.0, 0.6));
 
       growth += max(relativeHumidity - 1.0, 0.) * max(-30.0 - KtoC(realTemp), 0.) * 0.0001; // increase growthrate below -30 C and above 100% relative humidity
 
@@ -217,7 +217,7 @@ void main()
       if (newMass[ICE] > 0.0)                                                                        // if any ice
         dropletTemp = min(dropletTemp, CtoK(0.0));                                                   // temp can not be more than 0 C
 
-      float evapAndSubli = max((maxWater(dropletTemp) - water[TOTAL]) * surfaceArea * evapRate, 0.); // 0.0005 evaporation and sublimation only positive
+      float evapAndSubli = max((maxWater(dropletTemp) - water[TOTAL]) * surfaceArea * evapRate * (0.75 + min(length(base.xy) * 40.0, 0.9)), 0.); // evaporation and sublimation only positive
 
       // evapAndSubli = 0.0000;                                                                         // remove quickly for DEBUG
 
@@ -236,7 +236,7 @@ void main()
       // Update position
       // move with air    * 2. because droplet position goes from -1. to 1
       newPos += base.xy / resolution * 2.;
-      newPos.y -= fallSpeed * newDensity * sqrt(totalMass / surfaceArea); // fall speed relative to air
+      newPos.y -= fallSpeed * (0.85 + newDensity * 0.65) * sqrt(totalMass / surfaceArea); // fall speed relative to air
       /*
        // falling at fixed speed:
       float cellHeight = texelSize.y * 12000.0; // in meters
