@@ -251,14 +251,6 @@ void main()
 
       feedback[MASS] = totalMass;
 
-      // Charge separation tied directly to precipitation microphysics.
-      float mixedPhase = min(newMass[WATER], newMass[ICE]);
-      float updraft = clamp(base[VY] * 1200.0 + 0.5, 0.0, 1.0);
-      float turbulence = clamp(length(base.xy) * 80.0, 0.0, 1.0);
-      float chargeMagnitude = mixedPhase * (0.35 + turbulence * 0.65) * (0.45 + abs(updraft - 0.5) * 1.1);
-      float chargeSign = updraft > 0.5 ? 1.0 : -1.0;
-      feedback[CHARGE] += chargeSign * chargeMagnitude;
-
     }               // update
 
 #define pntSize 12. // 16.
@@ -267,18 +259,17 @@ void main()
     feedback[MASS] /= pntSurface;
     feedback[HEAT] /= pntSurface;
     feedback[VAPOR] /= pntSurface;
-    feedback[CHARGE] /= pntSurface;
-
     deposition[RAIN_DEPOSITION] /= pntSize; // only width matters because it's only applied at surface layer
     deposition[SNOW_DEPOSITION] /= pntSize; // only width matters because it's only applied at surface layer
 
-    // lightning candidate write to dedicated pixel(1,0) for extraction.
-    float lightningCharge = abs(feedback[CHARGE]) * (1.1 + feedback[MASS] * 5.6);
+    // cloud-density based lightning candidate write to dedicated pixel(1,0) for extraction.
+    float verticalMotion = abs(base[VY]) * 1400.0;
+    float cloudPotential = max(water[CLOUD] - 0.10, 0.0) * (0.70 + min(verticalMotion, 1.5)) + water[PRECIPITATION] * 0.0035;
     float lightningGate = random2d(vec2(newPos.x + iterNum * 0.007, newPos.y - iterNum * 0.013));
-    bool lightningCandidate = water[CLOUD] > 0.14 && lightningCharge > 0.05 && lightningGate < min(lightningCharge * 0.11, 0.24);
+    bool lightningCandidate = water[CLOUD] > 0.14 && cloudPotential > 0.08 && lightningGate < min(cloudPotential * 0.08, 0.16);
 
     if (lightningCandidate) {
-      float intensity = clamp(lightningCharge * 8.0, 0.4, 4.6);
+      float intensity = clamp(cloudPotential * 4.4, 0.4, 4.6);
       gl_PointSize = 1.0;
       gl_Position = vec4((((1.5) / resolution.x) * 2.0 - 1.0), (((0.5) / resolution.y) * 2.0 - 1.0), 0.0, 1.0);
       feedback = vec4(texCoord.x, texCoord.y, iterNum, intensity);

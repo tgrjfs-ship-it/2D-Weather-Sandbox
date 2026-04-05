@@ -1039,7 +1039,7 @@ const guiControls_default = {
   chargePerformanceMode : true,
   lightningCooldownIter : 2,
   lightningEvaporationFeedback : 0.35,
-  showCharges : true,
+  showCharges : false,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
@@ -6880,81 +6880,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function updateChargeParticleGpuBuffer()
   {
-    if (!guiControls.showCharges)
-      return 0;
-
-    const refreshChargeParticlesFromCloudMask = () => {
-      if (!chargeGridCloudMask)
-        return;
-
-      chargeParticlesPositive.length = 0;
-      chargeParticlesNegative.length = 0;
-      const densityMult = clamp(guiControls.chargeVisualDensity, 0.2, 2.0);
-      const perfMult = guiControls.chargePerformanceMode ? 0.65 : 1.0;
-      const targetPerSign = Math.max(24, Math.floor(110 * densityMult * perfMult));
-      let scanned = 0;
-      let cursorX = Math.floor((iterNum * 1.7) % chargeGridW);
-      let cursorY = Math.floor((iterNum * 2.1) % chargeGridH);
-
-      while (scanned < chargeGridW * chargeGridH * 2 && (chargeParticlesPositive.length < targetPerSign || chargeParticlesNegative.length < targetPerSign)) {
-        const x = (cursorX + scanned * 13) % chargeGridW;
-        const y = (cursorY + scanned * 7) % chargeGridH;
-        const idx = chargeGridIndex(x, y);
-        const mask = chargeGridCloudMask[idx];
-        const pCharge = chargeGridPositive ? chargeGridPositive[idx] : mask;
-        const nCharge = chargeGridNegative ? chargeGridNegative[idx] : mask;
-        scanned++;
-        if (mask < 0.16 || (pCharge < 0.04 && nCharge < 0.04))
-          continue;
-
-        const isUpperCloud = y > chargeGridH * 0.52;
-        const particle = {
-          x : (x + 0.2 + Math.random() * 0.6) / chargeGridW,
-          y : (y + 0.2 + Math.random() * 0.6) / chargeGridH,
-          strength : isUpperCloud ? pCharge : nCharge
-        };
-        if (isUpperCloud) {
-          if (chargeParticlesPositive.length < targetPerSign)
-            chargeParticlesPositive.push(particle);
-        } else if (chargeParticlesNegative.length < targetPerSign) {
-          chargeParticlesNegative.push(particle);
-        }
-      }
-    };
-    refreshChargeParticlesFromCloudMask();
-
-    let count = 0;
-    const appendParticle = (p, sign) => {
-      if (count >= maxChargeRenderParticles)
-        return;
-      const base = count * 3;
-      chargeParticleData[base + 0] = p.x;
-      chargeParticleData[base + 1] = p.y;
-      chargeParticleData[base + 2] = sign;
-      count++;
-      if (guiControls.wrapHorizontally && count + 2 < maxChargeRenderParticles) {
-        const left = count * 3;
-        chargeParticleData[left + 0] = p.x - 1.0;
-        chargeParticleData[left + 1] = p.y;
-        chargeParticleData[left + 2] = sign;
-        count++;
-        const right = count * 3;
-        chargeParticleData[right + 0] = p.x + 1.0;
-        chargeParticleData[right + 1] = p.y;
-        chargeParticleData[right + 2] = sign;
-        count++;
-      }
-    };
-
-    for (let i = 0; i < chargeParticlesPositive.length; i++)
-      appendParticle(chargeParticlesPositive[i], 1.0);
-    for (let i = 0; i < chargeParticlesNegative.length; i++)
-      appendParticle(chargeParticlesNegative[i], -1.0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, chargeParticleBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chargeParticleData.subarray(0, count * 3));
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    return count;
+    return 0;
   }
 
   function draw()
@@ -7256,12 +7182,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
-              const cloudScanInterval = guiControls.chargePerformanceMode ? 2 : 1;
-              if (iterNum - lastCloudScanIter >= cloudScanInterval) {
-                collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.3)));
-                lastCloudScanIter = iterNum;
-              }
-              accumulateCloudChargesFromMask(iterNum);
               const precipStrike = pollPrecipitationLightning();
               if (precipStrike) {
                 emitLightningStrike(precipStrike);

@@ -82,7 +82,7 @@ precision highp isampler2D;
 #define MASS 0
 #define HEAT 1
 #define VAPOR 2
-#define CHARGE 3
+// 3 reserved
 
 // Lightning Location
 #define CG_LIGHTNING_INTENSITY_THRESHOLD 1.0
