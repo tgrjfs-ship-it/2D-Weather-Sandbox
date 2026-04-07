@@ -25,6 +25,23 @@ function updateSetupSliders()
   document.getElementById('simResShowX').value = simResX;
   document.getElementById('simResShowY').value = simResY
   document.getElementById('simHeightShow').value = simHeight + ' m';
+  const renderResSel = document.getElementById('renderResolutionSel');
+  const renderResShow = document.getElementById('renderResolutionShow');
+  if (renderResSel && renderResShow)
+    renderResShow.value = renderResSel.value === 'AUTO' ? 'Auto (native)' : renderResSel.value + 'p';
+}
+
+const renderResolutionOptions = [144, 240, 360, 480, 720, 1080, 1440, 2160, 4320];
+let selectedRenderResolution = 'AUTO';
+
+function computeRenderScale()
+{
+  if (selectedRenderResolution === 'AUTO')
+    return 1.0;
+  const targetHeight = Number(selectedRenderResolution);
+  if (!Number.isFinite(targetHeight) || targetHeight <= 0)
+    return 1.0;
+  return Math.min(1.0, targetHeight / Math.max(window.innerHeight, 1));
 }
 
 var FPS = 60.0;
@@ -334,7 +351,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var currentLightningProfile = null;
-var lightningHistoryData = new Float32Array(8);
+var lightningHistoryData = new Float32Array(16); // [cgCurrent, cgPrev, icCurrent, icPrev], each vec4(x,y,startIter,intensity)
 var latestLightningPos = null;
 var simStepRequested = false;
 var chargeGridPositive = null;
@@ -1081,7 +1098,7 @@ const guiControls_default = {
   enableCameraShake : true,
   precipitationChargeCoupling : 0.75,
   lightningEvaporationFeedback : 0.35,
-  showCharges : true,
+  showCharges : false,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
@@ -1940,6 +1957,8 @@ let weatherStations = []; // array holding all weather stations
 async function loadData()
 {
   let file = document.getElementById('fileInput').files[0];
+  const requestedRenderRes = document.getElementById('renderResolutionSel')?.value || 'AUTO';
+  selectedRenderResolution = requestedRenderRes === 'AUTO' || renderResolutionOptions.includes(Number(requestedRenderRes)) ? requestedRenderRes : 'AUTO';
 
   if (file) {                                                    // load data from save file
     let versionBlob = file.slice(0, 4);                          // extract first 4 bytes containing version id
@@ -2041,7 +2060,6 @@ async function loadData()
     sim_res_x = parseInt(document.getElementById('simResSelX').value);
     sim_res_y = parseInt(document.getElementById('simResSelY').value);
     sim_height = parseInt(document.getElementById('simHeightSel').value);
-
     NUM_DROPLETS = (sim_res_x * sim_res_y) / NUM_DROPLETS_DEVIDER;
     SETUP_MODE = true;
 
@@ -4578,7 +4596,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
-    display_folder.add(guiControls, 'showCharges').name('Show Charges').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -4978,18 +4995,24 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   var canvas_aspect;
 
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  canvas.style.display = 'block';
-  canvas_aspect = canvas.width / canvas.height;
+  function applyRenderResolution()
+  {
+    const renderScale = computeRenderScale();
+    canvas.width = Math.max(1, Math.floor(window.innerWidth * renderScale));
+    canvas.height = Math.max(1, Math.floor(window.innerHeight * renderScale));
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    canvas.style.display = 'block';
+    canvas_aspect = canvas.width / canvas.height;
+  }
+
+  applyRenderResolution();
 
   var mouseXinSim, mouseYinSim;
   var prevMouseXinSim, prevMouseYinSim;
 
   window.addEventListener('resize', function() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    canvas_aspect = canvas.width / canvas.height;
+    applyRenderResolution();
 
     soundingGraph.graphCanvas.height = window.innerHeight;
     soundingGraph.graphCanvas.width = window.innerHeight;
@@ -6072,7 +6095,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const precipitationFeedbackTexture = gl.createTexture();
   const precipitationDepositionTexture = gl.createTexture();
   const lightningDetectionTexture = gl.createTexture();
-  const lightningDataTexture = gl.createTexture(); // 2-pixel history texture holding current and previous lightning strikes
+  const lightningDataTexture = gl.createTexture(); // 4-pixel history texture: current/previous for CG and IC
   const initialProfileTexture = gl.createTexture();
   const realWorldSoundingTTexture = gl.createTexture();
   const realWorldSoundingWTexture = gl.createTexture();
@@ -6105,7 +6128,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   function uploadLightningHistoryTexture()
   {
     gl.bindTexture(gl.TEXTURE_2D, lightningDataTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -6658,8 +6681,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       iterNum,
       chargeStrike.intensity
     ]);
-    lightningHistoryData.copyWithin(4, 0, 4);
-    lightningHistoryData.set(lightningDataValues, 0);
+    const slotOffset = chargeStrike.cloudToGround ? 0 : 8;
+    lightningHistoryData.copyWithin(slotOffset + 4, slotOffset, slotOffset + 4);
+    lightningHistoryData.set(lightningDataValues, slotOffset);
     uploadLightningHistoryTexture();
 
     latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
@@ -6697,29 +6721,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function updateChargeParticleGpuBuffer()
   {
-    if (!guiControls.showCharges)
-      return 0;
-
-    let count = 0;
-    const appendParticle = (p, sign) => {
-      if (count >= maxChargeRenderParticles)
-        return;
-      const base = count * 3;
-      chargeParticleData[base + 0] = p.x;
-      chargeParticleData[base + 1] = p.y;
-      chargeParticleData[base + 2] = sign;
-      count++;
-    };
-
-    for (let i = 0; i < chargeParticlesPositive.length; i++)
-      appendParticle(chargeParticlesPositive[i], 1.0);
-    for (let i = 0; i < chargeParticlesNegative.length; i++)
-      appendParticle(chargeParticlesNegative[i], -1.0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, chargeParticleBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chargeParticleData.subarray(0, count * 3));
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    return count;
+    return 0;
   }
 
   function draw()
