@@ -927,7 +927,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   updateChargeParticlesFromGrid(currentIter);
   buildChargeLinkChains();
 
-  if (currentIter - chargeLinksLastStrikeIter < 10 || currentIter < chargeSystemWarmupUntilIter)
+  if (currentIter <= chargeLinksLastStrikeIter || currentIter < chargeSystemWarmupUntilIter)
     return null;
 
   let best = null;
@@ -2072,93 +2072,33 @@ class LoadingBar
     this.loadingBar.className = 'loading-overlay';
 
     const shell = document.createElement('div');
-    shell.className = 'loading-shell';
+    shell.className = 'loading-simple-shell';
     this.loadingBar.appendChild(shell);
 
-    const masthead = document.createElement('div');
-    masthead.className = 'loading-masthead';
-    shell.appendChild(masthead);
-
-    const eyebrow = document.createElement('span');
-    eyebrow.className = 'loading-eyebrow';
-    eyebrow.textContent = 'Launching atmospheric sandbox';
-    masthead.appendChild(eyebrow);
-
     const title = document.createElement('h2');
-    title.textContent = 'Loading simulation assets.';
-    masthead.appendChild(title);
-
-    const subtitle = document.createElement('p');
-    subtitle.textContent = 'Preparing shaders and weather data.';
-    masthead.appendChild(subtitle);
-
-    const content = document.createElement('div');
-    content.className = 'loading-content';
-    shell.appendChild(content);
-
-    const card = document.createElement('div');
-    card.className = 'loading-card';
-    content.appendChild(card);
-
-    const progressHeader = document.createElement('div');
-    progressHeader.className = 'loading-progress-header';
-    card.appendChild(progressHeader);
-
-    const visual = document.createElement('div');
-    visual.className = 'loading-visual';
-    visual.innerHTML = '<div class="loading-orbit loading-orbit-one"></div><div class="loading-orbit loading-orbit-two"></div><div class="loading-core"></div>';
-    card.appendChild(visual);
+    title.className = 'loading-simple-title';
+    title.textContent = 'Starting 2D Weather Sandbox';
+    shell.appendChild(title);
 
     this.percentLabel = document.createElement('strong');
-    this.percentLabel.className = 'loading-percent';
-    progressHeader.appendChild(this.percentLabel);
+    this.percentLabel.className = 'loading-simple-percent';
+    shell.appendChild(this.percentLabel);
 
     this.stageLabel = document.createElement('span');
-    this.stageLabel.className = 'loading-stage';
-    progressHeader.appendChild(this.stageLabel);
+    this.stageLabel.className = 'loading-simple-stage';
+    shell.appendChild(this.stageLabel);
 
     const track = document.createElement('div');
-    track.className = 'loading-progress-track';
-    card.appendChild(track);
+    track.className = 'loading-simple-track';
+    shell.appendChild(track);
 
     this.bar = document.createElement('div');
-    this.bar.className = 'loading-progress-bar';
+    this.bar.className = 'loading-simple-bar';
     track.appendChild(this.bar);
 
-    this.metaGrid = document.createElement('div');
-    this.metaGrid.className = 'loading-meta-grid';
-    card.appendChild(this.metaGrid);
-
     this.tipEl = document.createElement('p');
-    this.tipEl.className = 'loading-tip';
-    card.appendChild(this.tipEl);
-
-    this.phaseRail = document.createElement('div');
-    this.phaseRail.className = 'loading-phase-rail';
-    card.appendChild(this.phaseRail);
-
-    const sidePanel = document.createElement('div');
-    sidePanel.className = 'loading-side-panel';
-    content.appendChild(sidePanel);
-
-    sidePanel.innerHTML = `
-      <div class="loading-side-card">
-        <span class="loading-side-label">Startup focus</span>
-        <strong id="loadingFocusLabel">Renderer + weather model</strong>
-        <p id="loadingFocusCopy">Preparing UI and lightning renderer.</p>
-      </div>
-      <div class="loading-side-card">
-        <span class="loading-side-label">Pipeline checks</span>
-        <ul class="loading-checklist">
-          <li>Shader compilation</li>
-          <li>Profile texture upload</li>
-          <li>Lightning atlas generation</li>
-          <li>HUD + control deck wiring</li>
-        </ul>
-      </div>`;
-
-    this.focusLabel = sidePanel.querySelector('#loadingFocusLabel');
-    this.focusCopy = sidePanel.querySelector('#loadingFocusCopy');
+    this.tipEl.className = 'loading-simple-tip';
+    shell.appendChild(this.tipEl);
 
     this.#update();
     document.body.appendChild(this.loadingBar);
@@ -2191,35 +2131,11 @@ class LoadingBar
       const safePercent = Math.max(0, Math.min(this.percent, 100));
       const description = this.description || 'Booting weather systems';
       const stage = safePercent < 20 ? 'Boot sequence' : safePercent < 45 ? 'Compiling renderer' : safePercent < 70 ? 'Uploading simulation data' : safePercent < 95 ? 'Finalizing control deck' : 'Launch ready';
-      const phaseIndex = safePercent < 20 ? 0 : safePercent < 45 ? 1 : safePercent < 70 ? 2 : safePercent < 95 ? 3 : 4;
 
       this.bar.style.width = safePercent + '%';
       this.percentLabel.textContent = safePercent + '%';
-      this.stageLabel.textContent = stage;
-      this.tipEl.textContent = loadingTips[Math.floor(safePercent / 20) % loadingTips.length];
-      this.focusLabel.textContent = description;
-      this.focusCopy.textContent = isError ? 'Startup stopped due to an error. Review the message and retry once the missing asset or server issue is resolved.' : 'Current stage: ' + description + '. The launch deck keeps the most important startup state visible while the app prepares simulation resources.';
-
-      this.phaseRail.innerHTML = '';
-      [ 'Boot', 'Shaders', 'Textures', 'Controls', 'Ready' ].forEach((label, index) => {
-        const phase = document.createElement('div');
-        phase.className = 'loading-phase' + (index < phaseIndex ? ' is-complete' : index == phaseIndex ? ' is-active' : '');
-        phase.innerHTML = '<span></span><strong>' + label + '</strong>';
-        this.phaseRail.appendChild(phase);
-      });
-
-      this.metaGrid.innerHTML = '';
-      [
-        ['Shaders', safePercent < 35 ? 'Compiling' : 'Ready'],
-        ['Textures', safePercent < 65 ? 'Uploading' : 'Ready'],
-        ['Lightning', safePercent < 85 ? 'Synthesizing' : 'Primed'],
-        ['Controls', safePercent < 95 ? 'Linking' : 'Ready']
-      ].forEach(([label, value]) => {
-        const item = document.createElement('div');
-        item.className = 'loading-meta-item';
-        item.innerHTML = '<span>' + label + '</span><strong>' + value + '</strong>';
-        this.metaGrid.appendChild(item);
-      });
+      this.stageLabel.textContent = stage + ' · ' + description;
+      this.tipEl.textContent = isError ? 'Startup stopped. Check the message above and retry.' : loadingTips[Math.floor(safePercent / 20) % loadingTips.length];
 
       setTimeout(resolve, 5);
     });
