@@ -350,7 +350,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   float cloudCoolTint = smoothstep(0.12, 1.0, cloudOpacity) * smoothstep(0.25, 0.95, cloudVertical);
   vec3 cloudBaseCol = mix(vec3(0.94, 0.95, 0.98), vec3(0.53, 0.62, 0.74), clamp(cloudDensity * 0.17, 0.0, 1.0));
   vec3 cloudHighlightCol = mix(vec3(0.98, 0.98, 1.0), vec3(0.82, 0.90, 1.0), cloudCoolTint);
-  float cloudHighlight = smoothstep(0.22, 0.95, cloudOpacity) * (0.35 + light * 0.75);
+  float cloudHighlight = smoothstep(0.22, 0.95, cloudOpacity) * (0.35 + lightIntensity * 0.75);
   vec3 cloudCol = mix(cloudBaseCol, cloudHighlightCol, cloudHighlight);
 
   const vec3 smokeThinCol = vec3(0.8, 0.51, 0.26);
