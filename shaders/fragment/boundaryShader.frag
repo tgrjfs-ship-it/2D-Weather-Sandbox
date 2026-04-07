@@ -18,6 +18,7 @@ uniform isampler2D wallTex;
 uniform sampler2D lightTex;
 uniform sampler2D precipFeedbackTex;
 uniform sampler2D precipDepositionTex;
+uniform sampler2D lightningDataTex;
 
 uniform float dryLapse;
 uniform float evapHeat;
@@ -93,6 +94,27 @@ float calcWaterEvaporation(float T, float W, float sunlight, vec2 velocity)
 }
 
 float calcFireIntensity(int veg, float moist, float precip) { return max(float(veg) * 0.00025 - moist * 0.00020 - precip * 0.02, 0.); }
+
+float lightningIgnitionEnergy(vec2 sampleTexCoord)
+{
+  float energy = 0.0;
+  float aspect = resolution.x / max(resolution.y, 1.0);
+  for (int i = 0; i < 4; i++) {
+    vec4 strike = texelFetch(lightningDataTex, ivec2(i, 0), 0);
+    if (strike[START_ITERNUM] <= 0.0)
+      continue;
+    float strikeAge = iterNum - strike[START_ITERNUM];
+    if (strikeAge < 0.0 || strikeAge > 9.0)
+      continue;
+    vec2 strikePos = strike.xy;
+    float strikeGroundY = mix(strikePos.y, 0.0, 0.86);
+    vec2 dist = vec2((sampleTexCoord.x - strikePos.x) * aspect, sampleTexCoord.y - strikeGroundY);
+    float distanceFalloff = 1.0 / (dot(dist, dist) * 55.0 + 0.012);
+    float timeFade = exp(-strikeAge * 0.58);
+    energy += (0.30 + strike[INTENSITY] * 0.40) * distanceFalloff * timeFade;
+  }
+  return energy;
+}
 
 void main()
 {
@@ -464,6 +486,10 @@ void main()
         evaporation = surfaceLandEvap * 0.10;
 
         water[SOIL_MOISTURE] -= evaporation;
+
+        float ignitionEnergy = lightningIgnitionEnergy(texCoord);
+        if (wall[TYPE] == WALLTYPE_LAND && wall[VEGETATION] >= minimalFireVegetation && water[SOIL_MOISTURE] < 75.0 && ignitionEnergy > 0.24)
+          wall[TYPE] = WALLTYPE_FIRE;
 
 
         if (int(iterNum) % 100 == 0) { // snow and soil moisture smoothing

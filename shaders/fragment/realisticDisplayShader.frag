@@ -165,12 +165,15 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
   return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
 }
 
-float deriveStrikeTemperature(vec2 pos, float strikeIntensity)
+float deriveStrikeTemperature(vec2 pos, float strikeIntensity, float isCG)
 {
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
   float altitudeFactor = clamp(1.0 - pos.y, 0.0, 1.0);
   float thermalNoise = random2d(pos * 17.23 + vec2(strikeIntensity, strikeIntensity * 1.7));
-  return mix(14500.0, 34000.0, clamp(densityFactor * 0.58 + altitudeFactor * 0.26 + thermalNoise * 0.16, 0.0, 1.0));
+  float thermalBlend = clamp(densityFactor * (0.52 + isCG * 0.15) + altitudeFactor * (0.18 + isCG * 0.12) + thermalNoise * 0.20, 0.0, 1.0);
+  float minTemp = mix(11800.0, 15200.0, isCG);
+  float maxTemp = mix(27800.0, 36200.0, isCG);
+  return mix(minTemp, maxTemp, thermalBlend);
 }
 
 float deriveStrikeBranchStrength(vec2 pos, float strikeIntensity)
@@ -187,25 +190,32 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   cloudOffset.x *= aspectRatios[0];
 
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
-  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity, 0.0);
   float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity) * 1.06;
 
   float spanX = mix(0.42, 0.62, densityFactor);
   float spanY = mix(0.12, 0.20, densityFactor);
 
-  float arcX = cloudOffset.x / spanX;
-  float arcCenterY = (arcX * arcX) * 0.18 - 0.04;
-  float arcY = (cloudOffset.y - arcCenterY) / spanY;
+  float seedA = random2d(vec2(strikeSeed * 0.0011, pos.x + pos.y));
+  float seedB = random2d(vec2(strikeSeed * 0.0017, pos.y + 0.37));
+  float seedC = random2d(vec2(strikeSeed * 0.0023, pos.x * 1.9 + pos.y * 0.7));
+  float arcAngle = (seedC - 0.5) * 2.4;
+  mat2 arcRot = mat2(cos(arcAngle), -sin(arcAngle), sin(arcAngle), cos(arcAngle));
+  vec2 rotatedOffset = arcRot * cloudOffset;
+
+  float arcX = rotatedOffset.x / spanX;
+  float arcBend = mix(-0.20, 0.24, seedA);
+  float arcSkew = (seedB - 0.5) * 0.35;
+  float arcCenterY = (arcX * arcX) * arcBend + arcX * arcSkew + (seedC - 0.5) * 0.08;
+  float arcY = (rotatedOffset.y - arcCenterY) / spanY;
   vec2 boltCoord = vec2(arcX * 0.5 + 0.5, 0.5 - arcY * 0.5);
 
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float seedA = random2d(vec2(strikeSeed * 0.0011, pos.x + pos.y));
-  float seedB = random2d(vec2(strikeSeed * 0.0017, pos.y + 0.37));
-  float wiggleA = sin(arcX * (14.0 + seedA * 8.0) + pos.x * 210.0 + iterNum * 0.05 + seedB * 6.283) * 0.050;
-  float wiggleB = sin(arcX * (28.0 + seedB * 9.0) + pos.y * 280.0 + 1.7 + seedA * 4.5) * 0.028;
-  float wiggleC = sin(arcX * (51.0 + seedA * 13.0) + pos.x * 90.0 + pos.y * 41.0 + seedB * 3.2) * 0.015;
+  float wiggleA = sin(arcX * (11.0 + seedA * 5.0) + pos.x * 150.0 + iterNum * 0.03 + seedB * 6.283) * 0.026;
+  float wiggleB = sin(arcX * (22.0 + seedB * 6.0) + pos.y * 180.0 + 1.7 + seedA * 3.1) * 0.014;
+  float wiggleC = sin(arcX * (34.0 + seedA * 8.0) + pos.x * 70.0 + pos.y * 26.0 + seedB * 2.2) * 0.008;
   float curvedCenter = 0.5 + wiggleA + wiggleB + wiggleC;
 
   float trunkWidth = mix(0.040, 0.020, densityFactor);
@@ -222,9 +232,9 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float texCore = max(max(texLightning.r, texLightning.g), texLightning.b) * smoothstep(0.08, 0.24, texLightning.a);
   float branchMask = max(fork1, max(fork2, fork3)) * (0.72 + branchStrength * 0.18);
 
-  float directBolt = max(texCore * 0.66, max(trunkMask, branchMask));
+  float directBolt = max(texCore * 0.78, max(trunkMask, branchMask));
   float glowEnvelope = exp(-pow(cloudOffset.x / (spanX * 0.88), 2.0) - pow((cloudOffset.y - arcCenterY) / (spanY * 0.92), 2.0));
-  float pulse = 0.86 + sin(iterNum * 0.24 + pos.x * 90.0) * 0.14;
+  float pulse = 0.98 + sin(iterNum * 0.26 + pos.x * 90.0) * 0.18;
   float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
   vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.82, 0.92, 1.0), thermalTint);
   icColor = mix(icColor, vec3(0.94, 0.98, 1.0), branchMask * 0.45);
@@ -232,7 +242,17 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float localCloudMask = smoothstep(0.08, 0.45, texture(waterTex, texCoord).g * 13.0 + texture(waterTex, texCoord).b * 0.6);
   float sourceCloudMask = smoothstep(0.06, 0.30, texture(waterTex, vec2(mod(pos.x, 1.0), clamp(pos.y, 0.0, 1.0))).g * 12.0);
   float icCloudGate = localCloudMask * sourceCloudMask;
-  return icColor * glowEnvelope * directBolt * pulse * 3600.0 * max(1.26 - lightningTime * 0.14, 0.0) * icCloudGate;
+
+  float leaderReach = smoothstep(0.52, 1.0, strikeIntensity);
+  float leaderLife = clamp(1.35 - lightningTime * 0.17, 0.0, 1.0);
+  float leaderNormY = clamp((pos.y - texCoord.y) / max(pos.y, 0.03), 0.0, 1.0);
+  float leaderSway = sin(leaderNormY * (16.0 + seedA * 6.0) + pos.x * 180.0 + seedB * 6.283) * (0.010 + seedC * 0.006);
+  float leaderLine = smoothstep(0.024, 0.004, abs((texCoord.x - mod(pos.x, 1.0)) * aspectRatios[0] - leaderSway));
+  float leaderBranch = smoothstep(0.020, 0.004, abs((texCoord.x - mod(pos.x, 1.0)) * aspectRatios[0] - (leaderSway + sin(leaderNormY * 29.0 + seedC * 4.1) * 0.034)))
+                    * smoothstep(0.22, 0.92, leaderNormY);
+  float groundLeader = leaderReach * leaderLife * (leaderLine + leaderBranch * 0.58) * step(texCoord.y, pos.y);
+
+  return icColor * (glowEnvelope * directBolt * pulse * 4400.0 * max(1.28 - lightningTime * 0.13, 0.0) * icCloudGate + groundLeader * 2200.0);
 }
 
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
@@ -244,6 +264,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   lightningTexCoord.y -= pos.y;
 
   float scaleMult = 1. / clamp(pos.y, 0.35, 0.95); // clamp cloud-base scaling so low strikes do not become huge blobs
+  scaleMult = min(scaleMult, 0.96 / max(pos.y, 0.02)); // keep bolt tail inside texture bounds so CG reaches the ground
 
   lightningTexCoord.x *= scaleMult * aspectRatios[0] / lightningTexAspect;
   lightningTexCoord.y *= -scaleMult;
@@ -254,7 +275,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
     return vec3(0);
 
   float densityFactor = clamp((strikeIntensity - CG_LIGHTNING_INTENSITY_THRESHOLD) / (4.0 - CG_LIGHTNING_INTENSITY_THRESHOLD), 0.0, 1.0);
-  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity, 1.0);
   float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
@@ -268,7 +289,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   float branchContribution = branchMask * (0.62 + branchStrength * 0.18);
   pixVal += branchContribution;
 
-  const float branchShowFactor = 2.35;      // 1.5
+  const float branchShowFactor = 1.75;      // 1.5
   const float leaderBrightness = 18000.;   // 200.0
   const float mainBoltBrightness = 85000.; // 100000.
 
@@ -278,7 +299,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   brightnessThreshold = clamp(brightnessThreshold, 0., 1.);
 
   if (lightningTime > 1.0) { // main bolt
-    brightnessThreshold = 0.58;
+    brightnessThreshold = mix(0.62, 0.40, smoothstep(0.0, 1.0, lightningTexCoord.y));
     currentLightningIntensity *= mainBoltBrightness;
   } else {
     currentLightningIntensity = leaderBrightness;
@@ -350,7 +371,7 @@ vec4 getAirColor(vec2 fragCoordIn)
   float cloudCoolTint = smoothstep(0.12, 1.0, cloudOpacity) * smoothstep(0.25, 0.95, cloudVertical);
   vec3 cloudBaseCol = mix(vec3(0.94, 0.95, 0.98), vec3(0.53, 0.62, 0.74), clamp(cloudDensity * 0.17, 0.0, 1.0));
   vec3 cloudHighlightCol = mix(vec3(0.98, 0.98, 1.0), vec3(0.82, 0.90, 1.0), cloudCoolTint);
-  float cloudHighlight = smoothstep(0.22, 0.95, cloudOpacity) * (0.35 + light * 0.75);
+  float cloudHighlight = smoothstep(0.22, 0.95, cloudOpacity) * (0.35 + lightIntensity * 0.75);
   vec3 cloudCol = mix(cloudBaseCol, cloudHighlightCol, cloudHighlight);
 
   const vec3 smokeThinCol = vec3(0.8, 0.51, 0.26);
@@ -370,31 +391,40 @@ vec4 getAirColor(vec2 fragCoordIn)
   vec3 color = (smokeOrFireCol * smokeOpacity / opacity) + (cloudCol * cloudOpacity * (1. - smokeOpacity) / opacity); // color blending
 
 
-  vec4 lightningData0 = texelFetch(lightningDataTex, ivec2(0, 0), 0);
-  vec4 lightningData1 = texelFetch(lightningDataTex, ivec2(1, 0), 0);
+  vec4 cgLightningData0 = texelFetch(lightningDataTex, ivec2(0, 0), 0);
+  vec4 cgLightningData1 = texelFetch(lightningDataTex, ivec2(1, 0), 0);
+  vec4 icLightningData0 = texelFetch(lightningDataTex, ivec2(2, 0), 0);
+  vec4 icLightningData1 = texelFetch(lightningDataTex, ivec2(3, 0), 0);
 
   for (int strikeIndex = 0; strikeIndex < 2; strikeIndex++) {
-    vec4 lightningData = strikeIndex == 0 ? lightningData0 : lightningData1;
-    if (lightningData[START_ITERNUM] <= 0.0)
+    vec4 icLightningData = strikeIndex == 0 ? icLightningData0 : icLightningData1;
+    if (icLightningData[START_ITERNUM] > 0.0) {
+      vec2 lightningPos = icLightningData.xy;
+      float lightningTime = calcLightningTime(icLightningData[START_ITERNUM]);
+      emittedLight += displayIntraCloudLightning(lightningPos, lightningTime, icLightningData[INTENSITY], icLightningData[START_ITERNUM]);
+    }
+  }
+
+  for (int strikeIndex = 0; strikeIndex < 2; strikeIndex++) {
+    vec4 cgLightningData = strikeIndex == 0 ? cgLightningData0 : cgLightningData1;
+    if (cgLightningData[START_ITERNUM] <= 0.0)
       continue;
 
-    vec2 lightningPos = lightningData.xy;
-    float lightningTime = calcLightningTime(lightningData[START_ITERNUM]);
-    float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
+    vec2 lightningPos = cgLightningData.xy;
+    float lightningTime = calcLightningTime(cgLightningData[START_ITERNUM]);
+    float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, cgLightningData[INTENSITY]);
 
-    emittedLight += displayIntraCloudLightning(lightningPos, lightningTime, lightningData[INTENSITY], lightningData[START_ITERNUM]);
-
-    if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
-      emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity, lightningData[INTENSITY]);
-    }
+    emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity, cgLightningData[INTENSITY]);
   }
 
   emittedLight /= 1. + cloudDensity * 100.0;
 
-#define lightningOnLightBrightness 0.004 // 0.002
+#define lightningOnLightBrightness 0.007 // 0.002
 
-  vec4 activeLightning = lightningData0[START_ITERNUM] > lightningData1[START_ITERNUM] ? lightningData0 : lightningData1;
-  if (activeLightning[START_ITERNUM] > 0.0) {
+  for (int strikeIndex = 0; strikeIndex < 4; strikeIndex++) {
+    vec4 activeLightning = strikeIndex == 0 ? cgLightningData0 : strikeIndex == 1 ? cgLightningData1 : strikeIndex == 2 ? icLightningData0 : icLightningData1;
+    if (activeLightning[START_ITERNUM] <= 0.0)
+      continue;
     vec2 lightningPos = activeLightning.xy;
     float lightningTime = calcLightningTime(activeLightning[START_ITERNUM]);
     float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, activeLightning[INTENSITY]);
