@@ -974,10 +974,10 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
   for (let x = 0; x < chargeGridW; x++) {
     const groundCharge = Math.max(0.0, chargeGroundNet[x]);
-    if (groundCharge < 0.9)
+    if (groundCharge < 0.68)
       continue;
 
-    const risingHeight = clamp((groundCharge - 0.65) * 0.14, 0.0, 0.90);
+    const risingHeight = clamp((groundCharge - 0.45) * 0.18, 0.0, 0.90);
     let nearestNeg = null;
     let nearestDist = 99.0;
     for (let i = 0; i < chargeParticlesNegative.length; i++) {
@@ -994,12 +994,12 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       }
     }
 
-    if (!nearestNeg || nearestDist > 0.23)
+    if (!nearestNeg || nearestDist > 0.33)
       continue;
 
-    const contrast = groundCharge + nearestNeg.strength;
-    const cgScore = contrast * (1.18 - nearestDist);
-    if (cgScore > bestScore) {
+    const contrast = groundCharge + nearestNeg.strength + 0.20;
+    const cgScore = contrast * (1.35 - nearestDist);
+    if (cgScore > bestScore * 0.92) {
       bestScore = cgScore;
       best = {
         x : (x + 0.5) / chargeGridW,
@@ -1013,7 +1013,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     }
   }
 
-  if (!best || bestScore < 0.62)
+  if (!best || bestScore < 0.50)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
@@ -1164,15 +1164,18 @@ function clamp(num, min, max) { return Math.min(Math.max(num, min), max); }
 
 function screenToSimX(screenX)
 {
-  let leftEdge = canvas.width / 2.0 - (canvas.width * cam.curZoom) / 2.0;
-  let rightEdge = canvas.width / 2.0 + (canvas.width * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let leftEdge = viewWidth / 2.0 - (viewWidth * cam.curZoom) / 2.0;
+  let rightEdge = viewWidth / 2.0 + (viewWidth * cam.curZoom) / 2.0;
   return map_range(screenX, leftEdge, rightEdge, 0.0, 1.0) - cam.curXpos / 2.0;
 }
 
 function screenToSimY(screenY)
 {
-  let topEdge = canvas.height / 2.0 - ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
-  let bottemEdge = canvas.height / 2.0 + ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let viewHeight = canvas.clientHeight || window.innerHeight;
+  let topEdge = viewHeight / 2.0 - ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
+  let bottemEdge = viewHeight / 2.0 + ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
   return map_range(screenY, bottemEdge, topEdge, 0.0, 1.0) - (cam.curYpos / 2.0) * sim_aspect;
 }
 
@@ -1180,8 +1183,9 @@ function simToScreenX(simX)
 {
   simX += 0.5;
   simX /= sim_res_x;
-  let leftEdge = canvas.width / 2.0 - (canvas.width * cam.curZoom) / 2.0;
-  let rightEdge = canvas.width / 2.0 + (canvas.width * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let leftEdge = viewWidth / 2.0 - (viewWidth * cam.curZoom) / 2.0;
+  let rightEdge = viewWidth / 2.0 + (viewWidth * cam.curZoom) / 2.0;
   return map_range(simX + cam.curXpos / 2.0, 0.0, 1.0, leftEdge, rightEdge);
 }
 
@@ -1189,8 +1193,10 @@ function simToScreenY(simY)
 {
   simY += 0.5; // center in cell
   simY /= sim_res_y;
-  let topEdge = canvas.height / 2.0 - ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
-  let bottemEdge = canvas.height / 2.0 + ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let viewHeight = canvas.clientHeight || window.innerHeight;
+  let topEdge = viewHeight / 2.0 - ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
+  let bottemEdge = viewHeight / 2.0 + ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
   return map_range(simY + (cam.curYpos / 2.0) * sim_aspect, 0.0, 1.0, bottemEdge, topEdge);
 }
 
@@ -2378,8 +2384,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     {
       if (cam.changeViewZoom(delta)) {
         // zoom center at mouse position
-        var mousePositionZoomCorrectionX = (((mouseX - canvas.width / 2 + this.tarXpos) * delta) / cam.tarZoom / canvas.width) * 2.0;
-        var mousePositionZoomCorrectionY = ((((mouseY - canvas.height / 2 + this.tarYpos) * delta) / cam.tarZoom / canvas.height) * 2.0) / canvas_aspect;
+        const viewWidth = canvas.clientWidth || window.innerWidth;
+        const viewHeight = canvas.clientHeight || window.innerHeight;
+        var mousePositionZoomCorrectionX = (((mouseX - viewWidth / 2 + this.tarXpos) * delta) / cam.tarZoom / viewWidth) * 2.0;
+        var mousePositionZoomCorrectionY = ((((mouseY - viewHeight / 2 + this.tarYpos) * delta) / cam.tarZoom / viewHeight) * 2.0) / canvas_aspect;
         this.changeViewXpos(-mousePositionZoomCorrectionX);
         this.changeViewYpos(mousePositionZoomCorrectionY);
       }
@@ -4066,7 +4074,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else if (gp) {
         this.elevator = -gp.axes[1];
       } else {                                                              // manual elevator control
-        this.elevator = (mouseY - canvas.height / 2) / canvas.height * 2.0; // pitch input -1.0 to +1.0
+        const viewHeight = canvas.clientHeight || window.innerHeight;
+        this.elevator = (mouseY - viewHeight / 2) / viewHeight * 2.0; // pitch input -1.0 to +1.0
       }
 
       // this.elevator /= 1.0 + Math.max(this.#airspeed - 80, 0.) * 0.01;          // limit elevator throw at higher airspeed
@@ -5256,8 +5265,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       mouseY = event.clientY - rect.top;
 
     if (middleMousePressed) {
-      cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / canvas.width) * 2.0);
-      cam.changeViewYpos(-((mouseY - prevMouseY) / cam.curZoom / canvas.width) * 2.0);
+      const viewWidth = canvas.clientWidth || window.innerWidth;
+      cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / viewWidth) * 2.0);
+      cam.changeViewYpos(-((mouseY - prevMouseY) / cam.curZoom / viewWidth) * 2.0);
       prevMouseX = mouseX;
       prevMouseY = mouseY;
     }
@@ -5375,8 +5385,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         cam.zoomAtMousePos((curSep / prevSep) - 1.0);
 
         if (wasTwoFingerTouchBefore) {
-          cam.changeViewYpos(((mouseX - prevMouseX) / cam.curZoom / canvas.width) * 2.0);
-          cam.changeViewYpos(((mouseY - prevMouseY) / cam.curZoom / canvas.width) * 2.0);
+          const viewWidth = canvas.clientWidth || window.innerWidth;
+          cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / viewWidth) * 2.0);
+          cam.changeViewYpos(((mouseY - prevMouseY) / cam.curZoom / viewWidth) * 2.0);
         }
         wasTwoFingerTouchBefore = true;
         prevMouseX = mouseX;
@@ -6772,7 +6783,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.viewport(0, 0, sim_res_x, sim_res_y);
       gl.useProgram(setupProgram);
       gl.uniform1f(gl.getUniformLocation(setupProgram, 'seed'), mouseXinSim);
-      gl.uniform1f(gl.getUniformLocation(setupProgram, 'heightMult'), ((canvas.height - mouseY) / canvas.height) * 2.0);
+      const viewHeight = canvas.clientHeight || window.innerHeight;
+      gl.uniform1f(gl.getUniformLocation(setupProgram, 'heightMult'), ((viewHeight - mouseY) / viewHeight) * 2.0);
       // Render to both framebuffers
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_0);
       gl.drawBuffers([ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ]);
@@ -7040,8 +7052,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 const isIC = !burst.seed.cloudToGround;
                 const progressT = clamp((burst.arcProgress + Math.random() * 0.25) / Math.max(burst.remaining + burst.arcProgress, 1.0), 0.0, 1.0);
                 const theta = burst.arcPhase + burst.arcDirection * progressT * Math.PI * burst.arcCurve;
-                const curveX = Math.cos(theta) * burst.arcRadiusX;
-                const curveY = Math.sin(theta) * burst.arcRadiusY;
+                const icThetaJitter = (Math.random() - 0.5) * Math.PI * 0.95;
+                const curveX = isIC ? (Math.cos(theta + icThetaJitter) * burst.arcRadiusX * (0.7 + Math.random() * 0.9)) : Math.cos(theta) * burst.arcRadiusX;
+                const curveY = isIC ? (Math.sin(theta + icThetaJitter) * burst.arcRadiusY * (0.6 + Math.random() * 1.0)) : Math.sin(theta) * burst.arcRadiusY;
                 const spread = burst.seed.cloudToGround ? 0.006 : 0.012;
                 const followUpStrike = {
                   x : mod(burst.seed.x + curveX + (Math.random() - 0.5) * spread + 1.0, 1.0),

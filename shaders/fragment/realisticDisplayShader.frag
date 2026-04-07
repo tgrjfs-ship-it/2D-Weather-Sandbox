@@ -165,12 +165,15 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
   return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
 }
 
-float deriveStrikeTemperature(vec2 pos, float strikeIntensity)
+float deriveStrikeTemperature(vec2 pos, float strikeIntensity, float isCG)
 {
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
   float altitudeFactor = clamp(1.0 - pos.y, 0.0, 1.0);
   float thermalNoise = random2d(pos * 17.23 + vec2(strikeIntensity, strikeIntensity * 1.7));
-  return mix(14500.0, 34000.0, clamp(densityFactor * 0.58 + altitudeFactor * 0.26 + thermalNoise * 0.16, 0.0, 1.0));
+  float thermalBlend = clamp(densityFactor * (0.52 + isCG * 0.15) + altitudeFactor * (0.18 + isCG * 0.12) + thermalNoise * 0.20, 0.0, 1.0);
+  float minTemp = mix(11800.0, 15200.0, isCG);
+  float maxTemp = mix(27800.0, 36200.0, isCG);
+  return mix(minTemp, maxTemp, thermalBlend);
 }
 
 float deriveStrikeBranchStrength(vec2 pos, float strikeIntensity)
@@ -187,22 +190,29 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   cloudOffset.x *= aspectRatios[0];
 
   float densityFactor = clamp((strikeIntensity - 0.3) / 3.7, 0.0, 1.0);
-  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity, 0.0);
   float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity) * 1.06;
 
   float spanX = mix(0.42, 0.62, densityFactor);
   float spanY = mix(0.12, 0.20, densityFactor);
 
-  float arcX = cloudOffset.x / spanX;
-  float arcCenterY = (arcX * arcX) * 0.18 - 0.04;
-  float arcY = (cloudOffset.y - arcCenterY) / spanY;
+  float seedA = random2d(vec2(strikeSeed * 0.0011, pos.x + pos.y));
+  float seedB = random2d(vec2(strikeSeed * 0.0017, pos.y + 0.37));
+  float seedC = random2d(vec2(strikeSeed * 0.0023, pos.x * 1.9 + pos.y * 0.7));
+  float arcAngle = (seedC - 0.5) * 2.4;
+  mat2 arcRot = mat2(cos(arcAngle), -sin(arcAngle), sin(arcAngle), cos(arcAngle));
+  vec2 rotatedOffset = arcRot * cloudOffset;
+
+  float arcX = rotatedOffset.x / spanX;
+  float arcBend = mix(-0.20, 0.24, seedA);
+  float arcSkew = (seedB - 0.5) * 0.35;
+  float arcCenterY = (arcX * arcX) * arcBend + arcX * arcSkew + (seedC - 0.5) * 0.08;
+  float arcY = (rotatedOffset.y - arcCenterY) / spanY;
   vec2 boltCoord = vec2(arcX * 0.5 + 0.5, 0.5 - arcY * 0.5);
 
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float seedA = random2d(vec2(strikeSeed * 0.0011, pos.x + pos.y));
-  float seedB = random2d(vec2(strikeSeed * 0.0017, pos.y + 0.37));
   float wiggleA = sin(arcX * (14.0 + seedA * 8.0) + pos.x * 210.0 + iterNum * 0.05 + seedB * 6.283) * 0.050;
   float wiggleB = sin(arcX * (28.0 + seedB * 9.0) + pos.y * 280.0 + 1.7 + seedA * 4.5) * 0.028;
   float wiggleC = sin(arcX * (51.0 + seedA * 13.0) + pos.x * 90.0 + pos.y * 41.0 + seedB * 3.2) * 0.015;
@@ -255,7 +265,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
     return vec3(0);
 
   float densityFactor = clamp((strikeIntensity - CG_LIGHTNING_INTENSITY_THRESHOLD) / (4.0 - CG_LIGHTNING_INTENSITY_THRESHOLD), 0.0, 1.0);
-  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity);
+  float strikeTemperature = deriveStrikeTemperature(pos, strikeIntensity, 1.0);
   float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
