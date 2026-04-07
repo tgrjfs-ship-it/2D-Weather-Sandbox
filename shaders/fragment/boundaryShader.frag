@@ -494,13 +494,22 @@ void main()
             water[SOIL_MOISTURE] += (avgNeighborSoilMoisture - water[SOIL_MOISTURE]) * moistureSmoothingRate;
           }
 
-          // dynamic vegetation
-
+          // dynamic vegetation (automatic): growth consumes soil moisture and transpires moisture back into the cloud field
           int vegetationGrowthRate = int(water[SOIL_MOISTURE] * sqrt(lightAboveSurface[SUNLIGHT]) * 0.01);
 
           if (vegetationGrowthRate > 0 && int(iterNum) % ((100 / vegetationGrowthRate) * 100) == 0) {      // growth interval
-            if (int(map_rangeC(realTempAboveSurface, CtoK(0.0), CtoK(25.0), 0., 127.)) > wall[VEGETATION]) // limit vegetation growth at lower temperatures
+            int vegetationTempCap = int(map_rangeC(realTempAboveSurface, CtoK(0.0), CtoK(25.0), 0., 127.));
+            if (vegetationTempCap > wall[VEGETATION]) {
               wall[VEGETATION] += 1;
+
+              float growthSoilCost = 0.14 + float(wall[VEGETATION]) * 0.0009;
+              float growthDraw = min(water[SOIL_MOISTURE], growthSoilCost);
+              water[SOIL_MOISTURE] -= growthDraw;
+
+              float cloudRelease = growthDraw * (0.20 + float(wall[VEGETATION]) * (1.0 / 127.0) * 0.18);
+              water[TOTAL] += cloudRelease;
+              water[CLOUD] += cloudRelease;
+            }
           }
 
           int subInterval = int(iterNum) / 100;

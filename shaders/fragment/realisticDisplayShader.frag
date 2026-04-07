@@ -181,7 +181,7 @@ float deriveStrikeBranchStrength(vec2 pos, float strikeIntensity)
   return 1.02 + densityFactor * 0.68 + altitudeFactor * 0.18 + branchNoise * 0.24;
 }
 
-vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeIntensity)
+vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeIntensity, float strikeSeed)
 {
   vec2 cloudOffset = vec2(texCoord.x - pos.x, texCoord.y - pos.y);
   cloudOffset.x *= aspectRatios[0];
@@ -201,19 +201,21 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float wiggleA = sin(arcX * 16.0 + pos.x * 210.0 + iterNum * 0.05) * 0.050;
-  float wiggleB = sin(arcX * 31.0 + pos.y * 280.0 + 1.7) * 0.028;
-  float wiggleC = sin(arcX * 57.0 + pos.x * 90.0 + pos.y * 41.0) * 0.015;
+  float seedA = random2d(vec2(strikeSeed * 0.0011, pos.x + pos.y));
+  float seedB = random2d(vec2(strikeSeed * 0.0017, pos.y + 0.37));
+  float wiggleA = sin(arcX * (14.0 + seedA * 8.0) + pos.x * 210.0 + iterNum * 0.05 + seedB * 6.283) * 0.050;
+  float wiggleB = sin(arcX * (28.0 + seedB * 9.0) + pos.y * 280.0 + 1.7 + seedA * 4.5) * 0.028;
+  float wiggleC = sin(arcX * (51.0 + seedA * 13.0) + pos.x * 90.0 + pos.y * 41.0 + seedB * 3.2) * 0.015;
   float curvedCenter = 0.5 + wiggleA + wiggleB + wiggleC;
 
   float trunkWidth = mix(0.040, 0.020, densityFactor);
   float trunkMask = smoothstep(trunkWidth, trunkWidth * 0.22, abs((boltCoord.y - 0.5) - (curvedCenter - 0.5)));
 
-  float fork1 = smoothstep(0.028, 0.005, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * 22.0 + 0.6) * 0.12)))
+  float fork1 = smoothstep(0.028, 0.005, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (20.0 + seedA * 8.0) + 0.6 + seedB) * 0.12)))
               * smoothstep(0.18, 0.86, boltCoord.x);
-  float fork2 = smoothstep(0.024, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) - sin(arcX * 26.0 + 2.3) * 0.10)))
+  float fork2 = smoothstep(0.024, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) - sin(arcX * (24.0 + seedB * 11.0) + 2.3 + seedA * 1.4) * 0.10)))
               * smoothstep(0.12, 0.90, boltCoord.x);
-  float fork3 = smoothstep(0.020, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * 41.0 + 4.1) * 0.08)))
+  float fork3 = smoothstep(0.020, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (36.0 + seedA * 16.0) + 4.1 + seedB * 2.4) * 0.08)))
               * smoothstep(0.28, 0.98, boltCoord.x);
 
   vec4 texLightning = texture(lightningTex, boltCoord);
@@ -256,14 +258,15 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   float branchStrength = deriveStrikeBranchStrength(pos, strikeIntensity);
 
   vec4 lightningTexel = texture(lightningTex, lightningTexCoord);
-  float texMask = smoothstep(0.08, 0.26, lightningTexel.a);
+  float texMask = smoothstep(0.06, 0.22, lightningTexel.a);
   float boltCore = max(max(lightningTexel.r, lightningTexel.g), lightningTexel.b);
   float glow = lightningTexel.a * 0.44;
   float trunkMask = proceduralLightningTrunk(lightningTexCoord, pos, strikeTemperature, branchStrength);
   float branchMask = proceduralLightningBranches(lightningTexCoord, pos, strikeTemperature, branchStrength);
   float dynamicPulse = 0.88 + sin(iterNum * 0.18 + pos.x * 35.0 + pos.y * 21.0) * 0.12;
-  float pixVal = max(mix(boltCore, glow, 0.20) * texMask * lightningTextureReady, trunkMask * (0.92 * dynamicPulse));
-  pixVal += branchMask * (0.40 + branchStrength * 0.08);
+  float pixVal = max(mix(boltCore, glow, 0.18) * texMask * lightningTextureReady, trunkMask * (0.92 * dynamicPulse));
+  float branchContribution = branchMask * (0.62 + branchStrength * 0.18);
+  pixVal += branchContribution;
 
   const float branchShowFactor = 2.35;      // 1.5
   const float leaderBrightness = 18000.;   // 200.0
@@ -282,6 +285,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   }
 
   pixVal -= brightnessThreshold;
+  pixVal += branchContribution * 0.55;
 
   pixVal = max(pixVal, 0.0);
 
@@ -339,15 +343,15 @@ vec4 getAirColor(vec2 fragCoordIn)
 
   float cloudwater = water[CLOUD];
 
-  vec3 cloudCol = vec3(1.0 / (cloudwater * 0.005 + 1.0)); // 0.10 white to black
-
   float cloudDensity = max(cloudwater * 13.6, 0.0);
-
   float totalDensity = cloudDensity + water[PRECIPITATION] * 0.8; // visualize precipitation
-
-
-  // float cloudOpacity = clamp(cloudwater * 4.0, 0.0, 1.0);
   float cloudOpacity = clamp(1.0 - (1.0 / (1. + totalDensity)), 0.0, 1.0);
+  float cloudVertical = clamp(texCoord.y, 0.0, 1.0);
+  float cloudCoolTint = smoothstep(0.12, 1.0, cloudOpacity) * smoothstep(0.25, 0.95, cloudVertical);
+  vec3 cloudBaseCol = mix(vec3(0.94, 0.95, 0.98), vec3(0.53, 0.62, 0.74), clamp(cloudDensity * 0.17, 0.0, 1.0));
+  vec3 cloudHighlightCol = mix(vec3(0.98, 0.98, 1.0), vec3(0.82, 0.90, 1.0), cloudCoolTint);
+  float cloudHighlight = smoothstep(0.22, 0.95, cloudOpacity) * (0.35 + light * 0.75);
+  vec3 cloudCol = mix(cloudBaseCol, cloudHighlightCol, cloudHighlight);
 
   const vec3 smokeThinCol = vec3(0.8, 0.51, 0.26);
   const vec3 smokeThickCol = vec3(0., 0., 0.);
@@ -378,7 +382,7 @@ vec4 getAirColor(vec2 fragCoordIn)
     float lightningTime = calcLightningTime(lightningData[START_ITERNUM]);
     float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, lightningData[INTENSITY]);
 
-    emittedLight += displayIntraCloudLightning(lightningPos, lightningTime, lightningData[INTENSITY]);
+    emittedLight += displayIntraCloudLightning(lightningPos, lightningTime, lightningData[INTENSITY], lightningData[START_ITERNUM]);
 
     if (lightningData[INTENSITY] >= CG_LIGHTNING_INTENSITY_THRESHOLD) { // CG
       emittedLight += displayLightning(lightningPos, lightningTime, currentLightningIntensity, lightningData[INTENSITY]);
