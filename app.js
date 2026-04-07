@@ -25,6 +25,23 @@ function updateSetupSliders()
   document.getElementById('simResShowX').value = simResX;
   document.getElementById('simResShowY').value = simResY
   document.getElementById('simHeightShow').value = simHeight + ' m';
+  const renderResSel = document.getElementById('renderResolutionSel');
+  const renderResShow = document.getElementById('renderResolutionShow');
+  if (renderResSel && renderResShow)
+    renderResShow.value = renderResSel.value === 'AUTO' ? 'Auto (native)' : renderResSel.value + 'p';
+}
+
+const renderResolutionOptions = [144, 240, 360, 480, 720, 1080, 1440, 2160, 4320];
+let selectedRenderResolution = 'AUTO';
+
+function computeRenderScale()
+{
+  if (selectedRenderResolution === 'AUTO')
+    return 1.0;
+  const targetHeight = Number(selectedRenderResolution);
+  if (!Number.isFinite(targetHeight) || targetHeight <= 0)
+    return 1.0;
+  return Math.min(1.0, targetHeight / Math.max(window.innerHeight, 1));
 }
 
 var FPS = 60.0;
@@ -334,7 +351,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var currentLightningProfile = null;
-var lightningHistoryData = new Float32Array(8);
+var lightningHistoryData = new Float32Array(16); // [cgCurrent, cgPrev, icCurrent, icPrev], each vec4(x,y,startIter,intensity)
 var latestLightningPos = null;
 var simStepRequested = false;
 var chargeGridPositive = null;
@@ -957,10 +974,10 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
   for (let x = 0; x < chargeGridW; x++) {
     const groundCharge = Math.max(0.0, chargeGroundNet[x]);
-    if (groundCharge < 0.9)
+    if (groundCharge < 0.68)
       continue;
 
-    const risingHeight = clamp((groundCharge - 0.65) * 0.14, 0.0, 0.90);
+    const risingHeight = clamp((groundCharge - 0.45) * 0.18, 0.0, 0.90);
     let nearestNeg = null;
     let nearestDist = 99.0;
     for (let i = 0; i < chargeParticlesNegative.length; i++) {
@@ -977,12 +994,12 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       }
     }
 
-    if (!nearestNeg || nearestDist > 0.23)
+    if (!nearestNeg || nearestDist > 0.33)
       continue;
 
-    const contrast = groundCharge + nearestNeg.strength;
-    const cgScore = contrast * (1.18 - nearestDist);
-    if (cgScore > bestScore) {
+    const contrast = groundCharge + nearestNeg.strength + 0.20;
+    const cgScore = contrast * (1.35 - nearestDist);
+    if (cgScore > bestScore * 0.92) {
       bestScore = cgScore;
       best = {
         x : (x + 0.5) / chargeGridW,
@@ -996,7 +1013,34 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     }
   }
 
-  if (!best || bestScore < 0.62)
+  if (chargeSources && chargeSources.length > 0) {
+    for (let i = 0; i < chargeSources.length; i++) {
+      const source = chargeSources[i];
+      if (source.cloudDensity < 0.26 || source.mixedPhase < 0.24)
+        continue;
+      const groundColumn = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
+      const groundCharge = Math.max(0.0, chargeGroundNet[groundColumn]);
+      const terrainBoost = chargeGroundTargetWeight ? clamp(chargeGroundTargetWeight[groundColumn], 0.8, 1.9) : 1.0;
+      const densityScore = (source.cloudDensity * 1.35 + source.mixedPhase * 0.85 + source.precipitationLoading * 0.55 + source.iceMix * 0.40 + groundCharge * 0.35) * terrainBoost;
+      if (densityScore < 1.05)
+        continue;
+      const cgScore = densityScore * clamp(1.30 - source.y * 0.45, 0.85, 1.25);
+      if (cgScore > bestScore * 0.88) {
+        bestScore = cgScore;
+        best = {
+          x : source.x,
+          y : clamp(source.y * 0.74, 0.10, 0.82),
+          contrast : densityScore,
+          cloudToGround : true,
+          sourceParticle : null,
+          targetParticle : null,
+          groundColumn
+        };
+      }
+    }
+  }
+
+  if (!best || bestScore < 0.50)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
@@ -1081,7 +1125,7 @@ const guiControls_default = {
   enableCameraShake : true,
   precipitationChargeCoupling : 0.75,
   lightningEvaporationFeedback : 0.35,
-  showCharges : true,
+  showCharges : false,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
   twelveHourClock : false, // only for display.  false = metric
@@ -1147,15 +1191,18 @@ function clamp(num, min, max) { return Math.min(Math.max(num, min), max); }
 
 function screenToSimX(screenX)
 {
-  let leftEdge = canvas.width / 2.0 - (canvas.width * cam.curZoom) / 2.0;
-  let rightEdge = canvas.width / 2.0 + (canvas.width * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let leftEdge = viewWidth / 2.0 - (viewWidth * cam.curZoom) / 2.0;
+  let rightEdge = viewWidth / 2.0 + (viewWidth * cam.curZoom) / 2.0;
   return map_range(screenX, leftEdge, rightEdge, 0.0, 1.0) - cam.curXpos / 2.0;
 }
 
 function screenToSimY(screenY)
 {
-  let topEdge = canvas.height / 2.0 - ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
-  let bottemEdge = canvas.height / 2.0 + ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let viewHeight = canvas.clientHeight || window.innerHeight;
+  let topEdge = viewHeight / 2.0 - ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
+  let bottemEdge = viewHeight / 2.0 + ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
   return map_range(screenY, bottemEdge, topEdge, 0.0, 1.0) - (cam.curYpos / 2.0) * sim_aspect;
 }
 
@@ -1163,8 +1210,9 @@ function simToScreenX(simX)
 {
   simX += 0.5;
   simX /= sim_res_x;
-  let leftEdge = canvas.width / 2.0 - (canvas.width * cam.curZoom) / 2.0;
-  let rightEdge = canvas.width / 2.0 + (canvas.width * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let leftEdge = viewWidth / 2.0 - (viewWidth * cam.curZoom) / 2.0;
+  let rightEdge = viewWidth / 2.0 + (viewWidth * cam.curZoom) / 2.0;
   return map_range(simX + cam.curXpos / 2.0, 0.0, 1.0, leftEdge, rightEdge);
 }
 
@@ -1172,8 +1220,10 @@ function simToScreenY(simY)
 {
   simY += 0.5; // center in cell
   simY /= sim_res_y;
-  let topEdge = canvas.height / 2.0 - ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
-  let bottemEdge = canvas.height / 2.0 + ((canvas.width / sim_aspect) * cam.curZoom) / 2.0;
+  let viewWidth = canvas.clientWidth || window.innerWidth;
+  let viewHeight = canvas.clientHeight || window.innerHeight;
+  let topEdge = viewHeight / 2.0 - ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
+  let bottemEdge = viewHeight / 2.0 + ((viewWidth / sim_aspect) * cam.curZoom) / 2.0;
   return map_range(simY + (cam.curYpos / 2.0) * sim_aspect, 0.0, 1.0, bottemEdge, topEdge);
 }
 
@@ -1940,6 +1990,8 @@ let weatherStations = []; // array holding all weather stations
 async function loadData()
 {
   let file = document.getElementById('fileInput').files[0];
+  const requestedRenderRes = document.getElementById('renderResolutionSel')?.value || 'AUTO';
+  selectedRenderResolution = requestedRenderRes === 'AUTO' || renderResolutionOptions.includes(Number(requestedRenderRes)) ? requestedRenderRes : 'AUTO';
 
   if (file) {                                                    // load data from save file
     let versionBlob = file.slice(0, 4);                          // extract first 4 bytes containing version id
@@ -2041,7 +2093,6 @@ async function loadData()
     sim_res_x = parseInt(document.getElementById('simResSelX').value);
     sim_res_y = parseInt(document.getElementById('simResSelY').value);
     sim_height = parseInt(document.getElementById('simHeightSel').value);
-
     NUM_DROPLETS = (sim_res_x * sim_res_y) / NUM_DROPLETS_DEVIDER;
     SETUP_MODE = true;
 
@@ -2360,8 +2411,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     {
       if (cam.changeViewZoom(delta)) {
         // zoom center at mouse position
-        var mousePositionZoomCorrectionX = (((mouseX - canvas.width / 2 + this.tarXpos) * delta) / cam.tarZoom / canvas.width) * 2.0;
-        var mousePositionZoomCorrectionY = ((((mouseY - canvas.height / 2 + this.tarYpos) * delta) / cam.tarZoom / canvas.height) * 2.0) / canvas_aspect;
+        const viewWidth = canvas.clientWidth || window.innerWidth;
+        const viewHeight = canvas.clientHeight || window.innerHeight;
+        var mousePositionZoomCorrectionX = (((mouseX - viewWidth / 2 + this.tarXpos) * delta) / cam.tarZoom / viewWidth) * 2.0;
+        var mousePositionZoomCorrectionY = ((((mouseY - viewHeight / 2 + this.tarYpos) * delta) / cam.tarZoom / viewHeight) * 2.0) / canvas_aspect;
         this.changeViewXpos(-mousePositionZoomCorrectionX);
         this.changeViewYpos(mousePositionZoomCorrectionY);
       }
@@ -4048,7 +4101,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else if (gp) {
         this.elevator = -gp.axes[1];
       } else {                                                              // manual elevator control
-        this.elevator = (mouseY - canvas.height / 2) / canvas.height * 2.0; // pitch input -1.0 to +1.0
+        const viewHeight = canvas.clientHeight || window.innerHeight;
+        this.elevator = (mouseY - viewHeight / 2) / viewHeight * 2.0; // pitch input -1.0 to +1.0
       }
 
       // this.elevator /= 1.0 + Math.max(this.#airspeed - 80, 0.) * 0.01;          // limit elevator throw at higher airspeed
@@ -4578,7 +4632,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
     display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
-    display_folder.add(guiControls, 'showCharges').name('Show Charges').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -4978,18 +5031,24 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   var canvas_aspect;
 
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  canvas.style.display = 'block';
-  canvas_aspect = canvas.width / canvas.height;
+  function applyRenderResolution()
+  {
+    const renderScale = computeRenderScale();
+    canvas.width = Math.max(1, Math.floor(window.innerWidth * renderScale));
+    canvas.height = Math.max(1, Math.floor(window.innerHeight * renderScale));
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    canvas.style.display = 'block';
+    canvas_aspect = canvas.width / canvas.height;
+  }
+
+  applyRenderResolution();
 
   var mouseXinSim, mouseYinSim;
   var prevMouseXinSim, prevMouseYinSim;
 
   window.addEventListener('resize', function() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    canvas_aspect = canvas.width / canvas.height;
+    applyRenderResolution();
 
     soundingGraph.graphCanvas.height = window.innerHeight;
     soundingGraph.graphCanvas.width = window.innerHeight;
@@ -5233,8 +5292,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       mouseY = event.clientY - rect.top;
 
     if (middleMousePressed) {
-      cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / canvas.width) * 2.0);
-      cam.changeViewYpos(-((mouseY - prevMouseY) / cam.curZoom / canvas.width) * 2.0);
+      const viewWidth = canvas.clientWidth || window.innerWidth;
+      cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / viewWidth) * 2.0);
+      cam.changeViewYpos(-((mouseY - prevMouseY) / cam.curZoom / viewWidth) * 2.0);
       prevMouseX = mouseX;
       prevMouseY = mouseY;
     }
@@ -5352,8 +5412,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         cam.zoomAtMousePos((curSep / prevSep) - 1.0);
 
         if (wasTwoFingerTouchBefore) {
-          cam.changeViewYpos(((mouseX - prevMouseX) / cam.curZoom / canvas.width) * 2.0);
-          cam.changeViewYpos(((mouseY - prevMouseY) / cam.curZoom / canvas.width) * 2.0);
+          const viewWidth = canvas.clientWidth || window.innerWidth;
+          cam.changeViewXpos(((mouseX - prevMouseX) / cam.curZoom / viewWidth) * 2.0);
+          cam.changeViewYpos(((mouseY - prevMouseY) / cam.curZoom / viewWidth) * 2.0);
         }
         wasTwoFingerTouchBefore = true;
         prevMouseX = mouseX;
@@ -6072,7 +6133,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const precipitationFeedbackTexture = gl.createTexture();
   const precipitationDepositionTexture = gl.createTexture();
   const lightningDetectionTexture = gl.createTexture();
-  const lightningDataTexture = gl.createTexture(); // 2-pixel history texture holding current and previous lightning strikes
+  const lightningDataTexture = gl.createTexture(); // 4-pixel history texture: current/previous for CG and IC
   const initialProfileTexture = gl.createTexture();
   const realWorldSoundingTTexture = gl.createTexture();
   const realWorldSoundingWTexture = gl.createTexture();
@@ -6105,7 +6166,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   function uploadLightningHistoryTexture()
   {
     gl.bindTexture(gl.TEXTURE_2D, lightningDataTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 2, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -6658,8 +6719,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       iterNum,
       chargeStrike.intensity
     ]);
-    lightningHistoryData.copyWithin(4, 0, 4);
-    lightningHistoryData.set(lightningDataValues, 0);
+    const slotOffset = chargeStrike.cloudToGround ? 0 : 8;
+    lightningHistoryData.copyWithin(slotOffset + 4, slotOffset, slotOffset + 4);
+    lightningHistoryData.set(lightningDataValues, slotOffset);
     uploadLightningHistoryTexture();
 
     latestLightningPos = {x : chargeStrike.x, y : chargeStrike.y};
@@ -6697,29 +6759,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function updateChargeParticleGpuBuffer()
   {
-    if (!guiControls.showCharges)
-      return 0;
-
-    let count = 0;
-    const appendParticle = (p, sign) => {
-      if (count >= maxChargeRenderParticles)
-        return;
-      const base = count * 3;
-      chargeParticleData[base + 0] = p.x;
-      chargeParticleData[base + 1] = p.y;
-      chargeParticleData[base + 2] = sign;
-      count++;
-    };
-
-    for (let i = 0; i < chargeParticlesPositive.length; i++)
-      appendParticle(chargeParticlesPositive[i], 1.0);
-    for (let i = 0; i < chargeParticlesNegative.length; i++)
-      appendParticle(chargeParticlesNegative[i], -1.0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, chargeParticleBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chargeParticleData.subarray(0, count * 3));
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    return count;
+    return 0;
   }
 
   function draw()
@@ -6770,7 +6810,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.viewport(0, 0, sim_res_x, sim_res_y);
       gl.useProgram(setupProgram);
       gl.uniform1f(gl.getUniformLocation(setupProgram, 'seed'), mouseXinSim);
-      gl.uniform1f(gl.getUniformLocation(setupProgram, 'heightMult'), ((canvas.height - mouseY) / canvas.height) * 2.0);
+      const viewHeight = canvas.clientHeight || window.innerHeight;
+      gl.uniform1f(gl.getUniformLocation(setupProgram, 'heightMult'), ((viewHeight - mouseY) / viewHeight) * 2.0);
       // Render to both framebuffers
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_0);
       gl.drawBuffers([ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ]);
@@ -7038,8 +7079,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                 const isIC = !burst.seed.cloudToGround;
                 const progressT = clamp((burst.arcProgress + Math.random() * 0.25) / Math.max(burst.remaining + burst.arcProgress, 1.0), 0.0, 1.0);
                 const theta = burst.arcPhase + burst.arcDirection * progressT * Math.PI * burst.arcCurve;
-                const curveX = Math.cos(theta) * burst.arcRadiusX;
-                const curveY = Math.sin(theta) * burst.arcRadiusY;
+                const icThetaJitter = (Math.random() - 0.5) * Math.PI * 0.95;
+                const curveX = isIC ? (Math.cos(theta + icThetaJitter) * burst.arcRadiusX * (0.7 + Math.random() * 0.9)) : Math.cos(theta) * burst.arcRadiusX;
+                const curveY = isIC ? (Math.sin(theta + icThetaJitter) * burst.arcRadiusY * (0.6 + Math.random() * 1.0)) : Math.sin(theta) * burst.arcRadiusY;
                 const spread = burst.seed.cloudToGround ? 0.006 : 0.012;
                 const followUpStrike = {
                   x : mod(burst.seed.x + curveX + (Math.random() - 0.5) * spread + 1.0, 1.0),
