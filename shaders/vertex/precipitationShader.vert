@@ -93,12 +93,14 @@ void main()
       //  treshHold = max(map_range(realTemp, CtoK(0.0), CtoK(-30.0), subZeroThreshold, initalMass), initalMass);
       threshold = subZeroThreshold;
 
-    if (water[CLOUD] > threshold && base[TEMPERATURE] < 500.) { // if cloudwater above threshold and not wall
+    float smokeNucleation = clamp(water[SMOKE] * 0.10, 0.0, 0.16);
+    if (water[CLOUD] > threshold - smokeNucleation && base[TEMPERATURE] < 500.) { // smoke/dust can seed condensation
                                                                 // float spawnChance = (water[1] - threshold) * 1000.0 / inactiveDroplets;
                                                                 // if (spawnChance > rand2d(mass.xy)) {
                                                                 //  float spawnChance = (water[CLOUD] - threshold) / inactiveDroplets * resolution.x * resolution.y * spawnChanceMult;
 
-      float spawnChance = ((water[CLOUD] - threshold) / (inactiveDroplets + 10.0)) * resolution.x * resolution.y * spawnChanceMult; // 20.0  50.0
+      float spawnChance = ((water[CLOUD] - (threshold - smokeNucleation)) / (inactiveDroplets + 10.0)) * resolution.x * resolution.y * spawnChanceMult; // 20.0  50.0
+      spawnChance *= 1.0 + clamp(water[SMOKE] * 0.25, 0.0, 1.2);
 
       //    float nrmRand = random2d(vec2(mass[WATER] * 0.2324, iterNum * 0.1783 + random(mass[ICE]))); // normalized random value
 
@@ -178,6 +180,7 @@ void main()
       float growth = water[CLOUD] * growthRate * surfaceArea;
 
       growth += max(relativeHumidity - 1.0, 0.) * max(-30.0 - KtoC(realTemp), 0.) * 0.0001; // increase growthrate below -30 C and above 100% relative humidity
+      growth += clamp(water[SMOKE] * 0.0012, 0.0, 0.006) * surfaceArea; // smoke/dust nuclei accelerate droplet growth
 
 
       // Hail growth enhancement:
@@ -234,7 +237,7 @@ void main()
       // Update position
       // move with air    * 2. because droplet position goes from -1. to 1
       newPos += base.xy / resolution * 2.;
-      newPos.y -= fallSpeed * newDensity * sqrt(totalMass / surfaceArea); // fall speed relative to air
+      newPos.y -= fallSpeed * 2.0 * newDensity * sqrt(totalMass / surfaceArea); // 2x faster fall speed
       /*
        // falling at fixed speed:
       float cellHeight = texelSize.y * 12000.0; // in meters

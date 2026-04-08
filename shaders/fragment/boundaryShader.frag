@@ -99,7 +99,7 @@ float lightningIgnitionEnergy(vec2 sampleTexCoord)
 {
   float energy = 0.0;
   float aspect = resolution.x / max(resolution.y, 1.0);
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 8; i++) {
     vec4 strike = texelFetch(lightningDataTex, ivec2(i, 0), 0);
     if (strike[START_ITERNUM] <= 0.0)
       continue;
@@ -249,7 +249,7 @@ void main()
     float velocityFactor = length(base.xy) * 0.1; // 0.2
 
     // apply vorticity force
-    base.xy += vec2(vortForceX0Y0.x + vortForceX0Ym.x, vortForceX0Y0.y + vortForceXmY0.y) * (vorticity + velocityFactor);
+    base.xy += vec2(vortForceX0Y0.x + vortForceX0Ym.x, vortForceX0Y0.y + vortForceXmY0.y) * ((vorticity * 0.55) + velocityFactor * 0.45);
     //}
 
     if (nextToWall) {
@@ -460,10 +460,6 @@ void main()
 
           if (precipPutOutFire || fireIntensity < minimalFireIntensity) {
             wall[TYPE] = WALLTYPE_LAND; // turn off fire
-          } else if (int(iterNum) % (int(10. / fireIntensity) + 1) == 0) {
-            wall[VEGETATION] -= 1;      // reduce vegetation
-            if (wall[VEGETATION] < 10)
-              wall[TYPE] = WALLTYPE_LAND;
           }
         }
       case WALLTYPE_LAND: // no break, can also be fire or urban:

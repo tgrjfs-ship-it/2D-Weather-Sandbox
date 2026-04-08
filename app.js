@@ -351,7 +351,7 @@ var loadingBar;
 var cam;
 var soundSystem;
 var currentLightningProfile = null;
-var lightningHistoryData = new Float32Array(16); // [cgCurrent, cgPrev, icCurrent, icPrev], each vec4(x,y,startIter,intensity)
+var lightningHistoryData = new Float32Array(32); // [cg0..cg3, ic0..ic3], each vec4(x,y,startIter,intensity)
 var latestLightningPos = null;
 var simStepRequested = false;
 var chargeGridPositive = null;
@@ -998,7 +998,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       continue;
 
     const contrast = groundCharge + nearestNeg.strength + 0.20;
-    const cgScore = contrast * (1.35 - nearestDist);
+    const cgScore = contrast * (1.35 - nearestDist) * 10.0;
     if (cgScore > bestScore * 0.92) {
       bestScore = cgScore;
       best = {
@@ -1024,7 +1024,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       const densityScore = (source.cloudDensity * 1.35 + source.mixedPhase * 0.85 + source.precipitationLoading * 0.55 + source.iceMix * 0.40 + groundCharge * 0.35) * terrainBoost;
       if (densityScore < 1.05)
         continue;
-      const cgScore = densityScore * clamp(1.30 - source.y * 0.45, 0.85, 1.25);
+      const cgScore = densityScore * clamp(1.30 - source.y * 0.45, 0.85, 1.25) * 10.0;
       if (cgScore > bestScore * 0.88) {
         bestScore = cgScore;
         best = {
@@ -1064,7 +1064,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
 
 const guiControls_default = {
-  vorticity : 0.005,
+  vorticity : 0.002,
   dragMultiplier : 0.001, // 0.01
   wind : 0.0,
   globalEffectsStartAlt : 0,
@@ -1086,7 +1086,7 @@ const guiControls_default = {
   subZeroThreshold : 0.005, // 0.01
   spawnChance : 0.00005,    // 30. 10 to 50
   snowDensity : 0.2,        // 0.3
-  fallSpeed : 0.0003,
+  fallSpeed : 0.0006,
   growthRate0C : 0.0001,    // 0.0005
   growthRate_30C : 0.001,   // 0.01
   freezingRate : 0.01,
@@ -6133,7 +6133,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   const precipitationFeedbackTexture = gl.createTexture();
   const precipitationDepositionTexture = gl.createTexture();
   const lightningDetectionTexture = gl.createTexture();
-  const lightningDataTexture = gl.createTexture(); // 4-pixel history texture: current/previous for CG and IC
+  const lightningDataTexture = gl.createTexture(); // 8-pixel history texture: 4 CG + 4 IC recent strikes
   const initialProfileTexture = gl.createTexture();
   const realWorldSoundingTTexture = gl.createTexture();
   const realWorldSoundingWTexture = gl.createTexture();
@@ -6166,7 +6166,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   function uploadLightningHistoryTexture()
   {
     gl.bindTexture(gl.TEXTURE_2D, lightningDataTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 8, 1, 0, gl.RGBA, gl.FLOAT, lightningHistoryData);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -6720,8 +6720,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       iterNum,
       chargeStrike.intensity
     ]);
-    const slotOffset = chargeStrike.cloudToGround ? 0 : 8;
-    lightningHistoryData.copyWithin(slotOffset + 4, slotOffset, slotOffset + 4);
+    const slotOffset = chargeStrike.cloudToGround ? 0 : 16;
+    lightningHistoryData.copyWithin(slotOffset + 4, slotOffset, slotOffset + 12);
     lightningHistoryData.set(lightningDataValues, slotOffset);
     uploadLightningHistoryTexture();
 

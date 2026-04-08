@@ -391,13 +391,8 @@ vec4 getAirColor(vec2 fragCoordIn)
   vec3 color = (smokeOrFireCol * smokeOpacity / opacity) + (cloudCol * cloudOpacity * (1. - smokeOpacity) / opacity); // color blending
 
 
-  vec4 cgLightningData0 = texelFetch(lightningDataTex, ivec2(0, 0), 0);
-  vec4 cgLightningData1 = texelFetch(lightningDataTex, ivec2(1, 0), 0);
-  vec4 icLightningData0 = texelFetch(lightningDataTex, ivec2(2, 0), 0);
-  vec4 icLightningData1 = texelFetch(lightningDataTex, ivec2(3, 0), 0);
-
-  for (int strikeIndex = 0; strikeIndex < 2; strikeIndex++) {
-    vec4 icLightningData = strikeIndex == 0 ? icLightningData0 : icLightningData1;
+  for (int strikeIndex = 0; strikeIndex < 4; strikeIndex++) {
+    vec4 icLightningData = texelFetch(lightningDataTex, ivec2(4 + strikeIndex, 0), 0);
     if (icLightningData[START_ITERNUM] > 0.0) {
       vec2 lightningPos = icLightningData.xy;
       float lightningTime = calcLightningTime(icLightningData[START_ITERNUM]);
@@ -405,8 +400,8 @@ vec4 getAirColor(vec2 fragCoordIn)
     }
   }
 
-  for (int strikeIndex = 0; strikeIndex < 2; strikeIndex++) {
-    vec4 cgLightningData = strikeIndex == 0 ? cgLightningData0 : cgLightningData1;
+  for (int strikeIndex = 0; strikeIndex < 4; strikeIndex++) {
+    vec4 cgLightningData = texelFetch(lightningDataTex, ivec2(strikeIndex, 0), 0);
     if (cgLightningData[START_ITERNUM] <= 0.0)
       continue;
 
@@ -421,8 +416,8 @@ vec4 getAirColor(vec2 fragCoordIn)
 
 #define lightningOnLightBrightness 0.007 // 0.002
 
-  for (int strikeIndex = 0; strikeIndex < 4; strikeIndex++) {
-    vec4 activeLightning = strikeIndex == 0 ? cgLightningData0 : strikeIndex == 1 ? cgLightningData1 : strikeIndex == 2 ? icLightningData0 : icLightningData1;
+  for (int strikeIndex = 0; strikeIndex < 8; strikeIndex++) {
+    vec4 activeLightning = texelFetch(lightningDataTex, ivec2(strikeIndex, 0), 0);
     if (activeLightning[START_ITERNUM] <= 0.0)
       continue;
     vec2 lightningPos = activeLightning.xy;
