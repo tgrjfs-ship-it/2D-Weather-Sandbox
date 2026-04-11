@@ -947,8 +947,10 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   if (currentIter <= chargeLinksLastStrikeIter || currentIter < chargeSystemWarmupUntilIter)
     return null;
 
-  let best = null;
-  let bestScore = 0.0;
+  let bestIC = null;
+  let bestICScore = 0.0;
+  let bestCG = null;
+  let bestCGScore = 0.0;
 
   for (let i = 0; i < chargeLinkChains.length; i++) {
     const chain = chargeLinkChains[i];
@@ -959,9 +961,9 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     const maturity = Math.min((head.age + tail.age) / 150.0, 1.0);
     const chainLengthBoost = 1.0 + (chain.nodes.length - 2) * 0.16;
     const score = chain.contrast * chainLengthBoost * (1.0 + maturity + chargeHydrometeorCoupling * 0.25);
-    if (score > bestScore) {
-      bestScore = score;
-      best = {
+    if (score > bestICScore) {
+      bestICScore = score;
+      bestIC = {
         x : centerX,
         y : centerY,
         contrast : chain.contrast * chainLengthBoost,
@@ -999,9 +1001,9 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
 
     const contrast = groundCharge + nearestNeg.strength + 0.20;
     const cgScore = contrast * (1.35 - nearestDist) * 10.0;
-    if (cgScore > bestScore * 0.92) {
-      bestScore = cgScore;
-      best = {
+    if (cgScore > bestCGScore) {
+      bestCGScore = cgScore;
+      bestCG = {
         x : (x + 0.5) / chargeGridW,
         y : Math.max(0.035, nearestNeg.y * 0.55),
         contrast,
@@ -1025,9 +1027,9 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
       if (densityScore < 1.05)
         continue;
       const cgScore = densityScore * clamp(1.30 - source.y * 0.45, 0.85, 1.25) * 10.0;
-      if (cgScore > bestScore * 0.88) {
-        bestScore = cgScore;
-        best = {
+      if (cgScore > bestCGScore) {
+        bestCGScore = cgScore;
+        bestCG = {
           x : source.x,
           y : clamp(source.y * 0.74, 0.10, 0.82),
           contrast : densityScore,
@@ -1040,6 +1042,15 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     }
   }
 
+  let best = null;
+  if (bestIC && bestCG)
+    best = Math.random() < 0.5 ? bestIC : bestCG;
+  else if (bestCG)
+    best = bestCG;
+  else
+    best = bestIC;
+
+  const bestScore = Math.max(bestICScore, bestCGScore);
   if (!best || bestScore < 0.50)
     return null;
 
@@ -1093,8 +1104,8 @@ const guiControls_default = {
   meltingRate : 0.01,
   evapRate : 0.0008, // 0.0005
   displayMode : 'DISP_REAL',
-  wrapHorizontally : true,
-  SmoothCam : true,
+  wrapHorizontally : false,
+  SmoothCam : false,
   camSpeed : 0.01,
   exposure : 1.0,
   timeOfDay : 9.9,
@@ -2277,8 +2288,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       this.tarXpos = 0;
       this.tarYpos = -0.5 + sim_res_y / sim_res_x;
       this.tarZoom = 1.0001;
-      this.wrapHorizontally = true;
-      this.smooth = true;
+      this.wrapHorizontally = false;
+      this.smooth = false;
       this.#Xvel = 0;
       this.#Yvel = 0;
       this.#Zvel = 0;
@@ -2325,8 +2336,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     {
       const baseAmplitude = map_range_C(clamp(intensity, 0.0, 4.6), 0.0, 4.6, 0.0038, 0.034);
       this.#shakeAmplitude = Math.max(this.#shakeAmplitude, baseAmplitude);
-      this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * baseAmplitude * 1.55 * randomOffsetScale;
-      this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * baseAmplitude * sim_aspect * 1.55 * randomOffsetScale;
+      const initialAngle = Math.random() * Math.PI * 2.0;
+      const offsetScale = baseAmplitude * 1.55 * randomOffsetScale;
+      this.#shakeOffsetX = Math.cos(initialAngle) * offsetScale;
+      this.#shakeOffsetY = Math.sin(initialAngle) * offsetScale / sim_aspect;
       this.#shakeJitterFrames = 0;
     }
 
@@ -2339,9 +2352,11 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       } else {
         this.#shakeJitterFrames -= 1;
         if (this.#shakeJitterFrames <= 0) {
-          this.#shakeJitterFrames = 1;
-          this.#shakeOffsetX = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * 1.35;
-          this.#shakeOffsetY = (Math.random() * 2.0 - 1.0) * this.#shakeAmplitude * sim_aspect * 1.35;
+          this.#shakeJitterFrames = 1 + Math.floor(Math.random() * 3);
+          const jitterAngle = Math.random() * Math.PI * 2.0;
+          const jitterScale = this.#shakeAmplitude * 1.35;
+          this.#shakeOffsetX = Math.cos(jitterAngle) * jitterScale;
+          this.#shakeOffsetY = Math.sin(jitterAngle) * jitterScale / sim_aspect;
         }
         this.#shakeAmplitude *= 0.92;
       }
