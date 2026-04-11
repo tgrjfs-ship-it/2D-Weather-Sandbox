@@ -51,6 +51,7 @@ uniform float displayVectorField;
 
 uniform float iterNum;
 uniform float lightningTextureReady;
+uniform float minimalLightningFlash;
 
 out vec4 fragmentColor;
 
@@ -155,14 +156,15 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
 {
   float T0 = Tin - 1.;
 
-  float repeatPeriod = map_range(random2d(lightningPos), 0., 1., 1.5, 3.0);                                            // 2.5
+  float repeatPeriod = map_range(random2d(lightningPos), 0., 1., 1.2, 2.2);
   float numFlashes = floor(map_range(random2d(lightningPos * 2.737250), 0., 1., 1.0, max(intensity - 0.5, 0.) * 2.0)); // 0.4
 
   float minT = max(T0 - (repeatPeriod * numFlashes), 0.);
 
   float T = max(mod(T0, repeatPeriod), minT);
 
-  return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
+  float flashScale = mix(1.0, 0.25, clamp(minimalLightningFlash, 0.0, 1.0));
+  return max((1. / (0.07 + pow(T * 2.7, 3.5))) - 0.01, 0.) * pow(intensity, 1.55) * flashScale;
 }
 
 float deriveStrikeTemperature(vec2 pos, float strikeIntensity, float isCG)
@@ -213,28 +215,28 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   if (boltCoord.x < 0.02 || boltCoord.x > 0.98 || boltCoord.y < 0.02 || boltCoord.y > 0.98)
     return vec3(0.0);
 
-  float wiggleA = sin(arcX * (11.0 + seedA * 5.0) + pos.x * 150.0 + iterNum * 0.03 + seedB * 6.283) * 0.026;
-  float wiggleB = sin(arcX * (22.0 + seedB * 6.0) + pos.y * 180.0 + 1.7 + seedA * 3.1) * 0.014;
-  float wiggleC = sin(arcX * (34.0 + seedA * 8.0) + pos.x * 70.0 + pos.y * 26.0 + seedB * 2.2) * 0.008;
+  float wiggleA = sin(arcX * (10.0 + seedA * 3.0) + pos.x * 120.0 + iterNum * 0.02 + seedB * 6.283) * 0.016;
+  float wiggleB = sin(arcX * (19.0 + seedB * 4.0) + pos.y * 160.0 + 1.7 + seedA * 2.4) * 0.009;
+  float wiggleC = sin(arcX * (30.0 + seedA * 6.0) + pos.x * 60.0 + pos.y * 20.0 + seedB * 1.8) * 0.004;
   float curvedCenter = 0.5 + wiggleA + wiggleB + wiggleC;
 
   float trunkWidth = mix(0.040, 0.020, densityFactor);
   float trunkMask = smoothstep(trunkWidth, trunkWidth * 0.22, abs((boltCoord.y - 0.5) - (curvedCenter - 0.5)));
 
-  float fork1 = smoothstep(0.028, 0.005, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (20.0 + seedA * 8.0) + 0.6 + seedB) * 0.12)))
+  float fork1 = smoothstep(0.022, 0.007, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (18.0 + seedA * 6.0) + 0.6 + seedB) * 0.08)))
               * smoothstep(0.18, 0.86, boltCoord.x);
-  float fork2 = smoothstep(0.024, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) - sin(arcX * (24.0 + seedB * 11.0) + 2.3 + seedA * 1.4) * 0.10)))
+  float fork2 = smoothstep(0.020, 0.006, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) - sin(arcX * (22.0 + seedB * 8.0) + 2.3 + seedA * 1.4) * 0.07)))
               * smoothstep(0.12, 0.90, boltCoord.x);
-  float fork3 = smoothstep(0.020, 0.004, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (36.0 + seedA * 16.0) + 4.1 + seedB * 2.4) * 0.08)))
+  float fork3 = smoothstep(0.018, 0.006, abs((boltCoord.y - 0.5) - ((curvedCenter - 0.5) + sin(arcX * (30.0 + seedA * 10.0) + 4.1 + seedB * 2.1) * 0.05)))
               * smoothstep(0.28, 0.98, boltCoord.x);
 
   vec4 texLightning = texture(lightningTex, boltCoord);
   float texCore = max(max(texLightning.r, texLightning.g), texLightning.b) * smoothstep(0.08, 0.24, texLightning.a);
-  float branchMask = max(fork1, max(fork2, fork3)) * (0.72 + branchStrength * 0.18);
+  float branchMask = max(fork1, max(fork2, fork3)) * (0.46 + branchStrength * 0.09);
 
   float directBolt = max(texCore * 0.78, max(trunkMask, branchMask));
   float glowEnvelope = exp(-pow(cloudOffset.x / (spanX * 0.88), 2.0) - pow((cloudOffset.y - arcCenterY) / (spanY * 0.92), 2.0));
-  float pulse = 0.98 + sin(iterNum * 0.26 + pos.x * 90.0) * 0.18;
+  float pulse = 0.95 + sin(iterNum * 0.20 + pos.x * 90.0) * 0.08;
   float thermalTint = map_rangeC(strikeTemperature, 14500.0, 34000.0, 0.0, 1.0);
   vec3 icColor = mix(vec3(1.0, 0.82, 0.68), vec3(0.82, 0.92, 1.0), thermalTint);
   icColor = mix(icColor, vec3(0.94, 0.98, 1.0), branchMask * 0.45);
@@ -243,16 +245,11 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float sourceCloudMask = smoothstep(0.06, 0.30, texture(waterTex, vec2(mod(pos.x, 1.0), clamp(pos.y, 0.0, 1.0))).g * 12.0);
   float icCloudGate = localCloudMask * sourceCloudMask;
 
-  float leaderReach = smoothstep(0.52, 1.0, strikeIntensity);
-  float leaderLife = clamp(1.35 - lightningTime * 0.17, 0.0, 1.0);
-  float leaderNormY = clamp((pos.y - texCoord.y) / max(pos.y, 0.03), 0.0, 1.0);
-  float leaderSway = sin(leaderNormY * (16.0 + seedA * 6.0) + pos.x * 180.0 + seedB * 6.283) * (0.010 + seedC * 0.006);
-  float leaderLine = smoothstep(0.024, 0.004, abs((texCoord.x - mod(pos.x, 1.0)) * aspectRatios[0] - leaderSway));
-  float leaderBranch = smoothstep(0.020, 0.004, abs((texCoord.x - mod(pos.x, 1.0)) * aspectRatios[0] - (leaderSway + sin(leaderNormY * 29.0 + seedC * 4.1) * 0.034)))
-                    * smoothstep(0.22, 0.92, leaderNormY);
-  float groundLeader = leaderReach * leaderLife * (leaderLine + leaderBranch * 0.58) * step(texCoord.y, pos.y);
-
-  return icColor * (glowEnvelope * directBolt * pulse * 4400.0 * max(1.28 - lightningTime * 0.13, 0.0) * icCloudGate + groundLeader * 2200.0);
+  float inCloudVertical = smoothstep(pos.y - spanY * 1.2, pos.y - spanY * 0.15, texCoord.y)
+                        * (1.0 - smoothstep(pos.y + spanY * 1.1, pos.y + spanY * 2.2, texCoord.y));
+  float inCloudGate = icCloudGate * inCloudVertical;
+  float flashScale = mix(1.0, 0.30, clamp(minimalLightningFlash, 0.0, 1.0));
+  return icColor * (glowEnvelope * directBolt * pulse * 2100.0 * max(1.02 - lightningTime * 0.26, 0.0) * inCloudGate * flashScale);
 }
 
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
@@ -290,8 +287,9 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   pixVal += branchContribution;
 
   const float branchShowFactor = 1.75;      // 1.5
-  const float leaderBrightness = 18000.;   // 200.0
-  const float mainBoltBrightness = 85000.; // 100000.
+  float flashScale = mix(1.0, 0.28, clamp(minimalLightningFlash, 0.0, 1.0));
+  const float leaderBrightness = 9500.;
+  const float mainBoltBrightness = 36000.;
 
   float brightnessThreshold = 1. - lightningTime * branchShowFactor;
   brightnessThreshold += lightningTexCoord.y * branchShowFactor; // grow from the top to the bottem
@@ -300,9 +298,9 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   if (lightningTime > 1.0) { // main bolt
     brightnessThreshold = mix(0.62, 0.40, smoothstep(0.0, 1.0, lightningTexCoord.y));
-    currentLightningIntensity *= mainBoltBrightness;
+    currentLightningIntensity *= mainBoltBrightness * flashScale;
   } else {
-    currentLightningIntensity = leaderBrightness;
+    currentLightningIntensity = leaderBrightness * flashScale;
   }
 
   pixVal -= brightnessThreshold;
@@ -414,7 +412,7 @@ vec4 getAirColor(vec2 fragCoordIn)
 
   emittedLight /= 1. + cloudDensity * 100.0;
 
-#define lightningOnLightBrightness 0.007 // 0.002
+#define lightningOnLightBrightness 0.003
 
   for (int strikeIndex = 0; strikeIndex < 8; strikeIndex++) {
     vec4 activeLightning = texelFetch(lightningDataTex, ivec2(strikeIndex, 0), 0);
@@ -425,7 +423,7 @@ vec4 getAirColor(vec2 fragCoordIn)
     float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, activeLightning[INTENSITY]);
     vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
     dist.x *= aspectRatios[0];
-    float lightningOnLight = lightningOnLightBrightness / (pow(length(dist), 2.) + 0.03);
+    float lightningOnLight = (lightningOnLightBrightness * mix(1.0, 0.28, clamp(minimalLightningFlash, 0.0, 1.0))) / (pow(length(dist), 2.) + 0.03);
     lightningOnLight *= step(lightningTime, 6.0);
     lightningOnLight *= currentLightningIntensity;
     onLight += vec3(lightningOnLight);
