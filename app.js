@@ -469,8 +469,6 @@ function updateSimulationHud()
 
 function setWindVectorVisibility(visible)
 {
-  if (guiControls?.lightweightRendering)
-    visible = false;
   displayVectorField = !!visible;
   if (guiControls)
     guiControls.showWindVectors = !!visible;
@@ -1037,7 +1035,6 @@ const guiControls_default = {
   SmoothCam : false,
   camSpeed : 0.01,
   exposure : 1.0,
-  lightweightRendering : true,
   timeOfDay : 9.9,
   latitude : 45.0,
   month : 6.65, // Northern hemisphere summer solstice
@@ -4556,15 +4553,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         gl.uniform1f(gl.getUniformLocation(postProcessingProgram, 'exposure'), guiControls.exposure);
       })
       .name('Exposure');
-    display_folder.add(guiControls, 'lightweightRendering').onChange(function() {
-      if (guiControls.lightweightRendering) {
-        guiControls.showWindVectors = false;
-        guiControls.showDrops = false;
-        guiControls.showCharges = false;
-        setWindVectorVisibility(false);
-      }
-    }).name('Lightweight Rendering');
-
     display_folder.add(guiControls, 'camSpeed', 0.001, 0.050, 0.001).name('Camera Pan Speed');
     display_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
 
@@ -4585,6 +4573,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
+    display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -5406,8 +5395,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       handlePause();
     } else if (event.code == 'KeyD') {
       // D
-      if (!guiControls.lightweightRendering)
-        guiControls.showDrops = !guiControls.showDrops;
+      guiControls.showDrops = !guiControls.showDrops;
     } else if (event.code == 'KeyB') {
       // B: scrolling to change brush size
       bPressed = true;
@@ -7296,53 +7284,46 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.bindVertexArray(postProcessingVao);
 
 
-      if (guiControls.lightweightRendering) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer);
-        gl.viewport(0, 0, bloomFBOs[0].width, bloomFBOs[0].height);
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-      } else {
-        gl.useProgram(isolateBrightPartsProgram);
+      gl.useProgram(isolateBrightPartsProgram);
 
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, hdrFBO.texture);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer); // brightPartsFrameBuffer
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);                            // background color
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // render bright parts to separate texture
+
+      let prevFBO = bloomFBOs[0];
+
+      gl.useProgram(bloomBlurProgram);
+      gl.uniform1i(gl.getUniformLocation(bloomBlurProgram, 'bloomTexture'), 0);
+      for (let i = 1; i < bloomFBOs.length; i++) {
+        let destFBO = bloomFBOs[i];
+        gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
+        gl.viewport(0, 0, destFBO.width, destFBO.height);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, hdrFBO.texture);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer); // brightPartsFrameBuffer
-        gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);                            // background color
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // render bright parts to separate texture
-
-        let prevFBO = bloomFBOs[0];
-
-        gl.useProgram(bloomBlurProgram);
-        gl.uniform1i(gl.getUniformLocation(bloomBlurProgram, 'bloomTexture'), 0);
-        for (let i = 1; i < bloomFBOs.length; i++) {
-          let destFBO = bloomFBOs[i];
-          gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
-          gl.viewport(0, 0, destFBO.width, destFBO.height);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
-          gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-          prevFBO = destFBO;
-        }
-
-        gl.blendFunc(gl.ONE, gl.ONE);
-        gl.enable(gl.BLEND);
-        for (let i = bloomFBOs.length - 2; i >= 0; i--) {
-          let destFBO = bloomFBOs[i];
-          gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
-          gl.viewport(0, 0, destFBO.width, destFBO.height);
-          gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-          prevFBO = destFBO;
-        }
-        gl.disable(gl.BLEND);
+        gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        prevFBO = destFBO;
       }
+
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.enable(gl.BLEND);
+      for (let i = bloomFBOs.length - 2; i >= 0; i--) {
+        let destFBO = bloomFBOs[i];
+        gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
+        gl.viewport(0, 0, destFBO.width, destFBO.height);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        prevFBO = destFBO;
+      }
+      gl.disable(gl.BLEND);
 
       gl.useProgram(postProcessingProgram);
       gl.activeTexture(gl.TEXTURE0);
@@ -7367,7 +7348,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       gl.bindVertexArray(fluidVao);
 
-      if (guiControls.showDrops && !guiControls.lightweightRendering) {
+      if (guiControls.showDrops) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         // draw drops over clouds
@@ -7521,7 +7502,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
 
     const chargeParticleCount = updateChargeParticleGpuBuffer();
-    if (chargeParticleCount > 0 && guiControls.showCharges && !guiControls.lightweightRendering) {
+    if (chargeParticleCount > 0 && guiControls.showCharges) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(chargeParticleProgram);

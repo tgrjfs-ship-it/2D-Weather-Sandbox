@@ -163,7 +163,7 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
 
   float T = max(mod(T0, repeatPeriod), minT);
 
-  float flashScale = mix(1.0, 0.25, clamp(minimalLightningFlash, 0.0, 1.0));
+  float flashScale = minimalLightningFlash > 0.5 ? 0.08 : 1.0;
   return max((1. / (0.07 + pow(T * 2.7, 3.5))) - 0.01, 0.) * pow(intensity, 1.55) * flashScale;
 }
 
@@ -248,7 +248,7 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
   float inCloudVertical = smoothstep(pos.y - spanY * 1.2, pos.y - spanY * 0.15, texCoord.y)
                         * (1.0 - smoothstep(pos.y + spanY * 1.1, pos.y + spanY * 2.2, texCoord.y));
   float inCloudGate = icCloudGate * inCloudVertical;
-  float flashScale = mix(1.0, 0.30, clamp(minimalLightningFlash, 0.0, 1.0));
+  float flashScale = minimalLightningFlash > 0.5 ? 0.08 : 1.0;
   return icColor * (glowEnvelope * directBolt * pulse * 2100.0 * max(1.02 - lightningTime * 0.26, 0.0) * inCloudGate * flashScale);
 }
 
@@ -283,11 +283,11 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   float branchMask = proceduralLightningBranches(lightningTexCoord, pos, strikeTemperature, branchStrength);
   float dynamicPulse = 0.88 + sin(iterNum * 0.18 + pos.x * 35.0 + pos.y * 21.0) * 0.12;
   float pixVal = max(mix(boltCore, glow, 0.18) * texMask * lightningTextureReady, trunkMask * (0.92 * dynamicPulse));
-  float branchContribution = branchMask * (0.62 + branchStrength * 0.18);
+  float branchContribution = branchMask * (0.20 + branchStrength * 0.07) * smoothstep(0.12, 0.88, lightningTexCoord.y);
   pixVal += branchContribution;
 
   const float branchShowFactor = 1.75;      // 1.5
-  float flashScale = mix(1.0, 0.28, clamp(minimalLightningFlash, 0.0, 1.0));
+  float flashScale = minimalLightningFlash > 0.5 ? 0.08 : 1.0;
   const float leaderBrightness = 9500.;
   const float mainBoltBrightness = 36000.;
 
@@ -423,7 +423,7 @@ vec4 getAirColor(vec2 fragCoordIn)
     float currentLightningIntensity = lightningIntensityOverTime(lightningTime, lightningPos, activeLightning[INTENSITY]);
     vec2 dist = vec2(lightningPos.x - texCoord.x, max((abs(lightningPos.y / 2. - texCoord.y) - 0.1), 0.));
     dist.x *= aspectRatios[0];
-    float lightningOnLight = (lightningOnLightBrightness * mix(1.0, 0.28, clamp(minimalLightningFlash, 0.0, 1.0))) / (pow(length(dist), 2.) + 0.03);
+    float lightningOnLight = (lightningOnLightBrightness * (minimalLightningFlash > 0.5 ? 0.08 : 1.0)) / (pow(length(dist), 2.) + 0.03);
     lightningOnLight *= step(lightningTime, 6.0);
     lightningOnLight *= currentLightningIntensity;
     onLight += vec3(lightningOnLight);
