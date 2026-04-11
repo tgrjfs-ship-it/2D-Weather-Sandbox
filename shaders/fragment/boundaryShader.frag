@@ -31,6 +31,7 @@ uniform float waterWeight;
 uniform float waterTemperature;
 uniform sampler2D initialProfileTex;
 uniform bool allowCaves;
+uniform bool lightningIgnitesFires;
 
 float getProfileValue(sampler2D profileTex, int y)
 {
@@ -496,7 +497,8 @@ void main()
         water[SOIL_MOISTURE] -= evaporation;
 
         float ignitionEnergy = lightningIgnitionEnergy(texCoord);
-        if (wall[TYPE] == WALLTYPE_LAND && wall[VEGETATION] >= minimalFireVegetation && water[SOIL_MOISTURE] < 75.0 && ignitionEnergy > 0.24)
+        if (lightningIgnitesFires && wall[TYPE] == WALLTYPE_LAND && wall[VEGETATION] >= minimalFireVegetation && water[SOIL_MOISTURE] < 75.0 &&
+            ignitionEnergy > 0.24)
           wall[TYPE] = WALLTYPE_FIRE;
 
 

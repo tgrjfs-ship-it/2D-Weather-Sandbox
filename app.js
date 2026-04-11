@@ -437,12 +437,8 @@ var simulationHudHideTimer = null;
 
 function setSimulationHudVisibility(visible)
 {
-  const hud = ensureSimulationHud();
-  hud.shell.style.display = visible ? 'grid' : 'none';
-  hud.shell.hidden = !visible;
-  hud.shell.classList.toggle('is-hidden', !visible);
-  if (!visible)
-    hud.shell.classList.remove('visible');
+  // Simulation HUD removed per UX request.
+  return;
 }
 
 function animateUiElement(element, className = 'ui-pulse')
@@ -457,91 +453,24 @@ function animateUiElement(element, className = 'ui-pulse')
 
 function ensureSimulationHud()
 {
-  if (simulationHud)
-    return simulationHud;
-
-  const shell = document.createElement('div');
-  shell.id = 'simulationHud';
-  shell.className = 'simulation-hud';
-  shell.innerHTML = `
-    <div class="sim-hud-card sim-hud-primary">
-      <span class="sim-hud-label">Simulation Controls</span>
-      <strong class="sim-hud-value" data-hud-field="displayMode">Temperature</strong>
-      <p class="sim-hud-hints" data-hud-field="tool">Tool: Flashlight</p>
-    </div>
-    <div class="sim-hud-grid">
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Visual Toggles</span>
-        <strong class="sim-hud-value" data-hud-field="visuals">Vectors Off · Drops Off</strong>
-        <p class="sim-hud-hints">Tab vectors · D droplets.</p>
-      </div>
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Stations & Tools</span>
-        <strong class="sim-hud-value" data-hud-field="observers">Stations Hidden</strong>
-        <p class="sim-hud-hints" data-hud-field="controls">N station visibility · M station tool.</p>
-      </div>
-      <div class="sim-hud-card">
-        <span class="sim-hud-label">Lightning Links</span>
-        <strong class="sim-hud-value" data-hud-field="lightning">Awaiting strike</strong>
-        <p class="sim-hud-hints">+ / - links fire IC chains. Ground leaders rise slowly before CG discharge.</p>
-      </div>
-    </div>`;
-
-  document.body.appendChild(shell);
-  simulationHud = {
-    shell,
-    displayMode : shell.querySelector('[data-hud-field="displayMode"]'),
-    tool : shell.querySelector('[data-hud-field="tool"]'),
-    visuals : shell.querySelector('[data-hud-field="visuals"]'),
-    observers : shell.querySelector('[data-hud-field="observers"]'),
-    lightning : shell.querySelector('[data-hud-field="lightning"]'),
-    controls : shell.querySelector('[data-hud-field="controls"]')
-  };
-
+  simulationHud = null;
   return simulationHud;
 }
 
 function showSimulationHudPulse()
 {
-  const hud = ensureSimulationHud();
-  if (!guiControls?.showSimulationHud)
-    return;
-
-  hud.shell.classList.add('visible');
-  animateUiElement(hud.shell, 'ui-pulse');
-  clearTimeout(simulationHudHideTimer);
-  simulationHudHideTimer = setTimeout(() => {
-    hud.shell.classList.remove('visible');
-  }, 2200);
+  return;
 }
 
 function updateSimulationHud()
 {
-  if (SETUP_MODE || !guiControls)
-    return;
-
-  const hud = ensureSimulationHud();
-  setSimulationHudVisibility(guiControls.showSimulationHud);
-  if (!guiControls.showSimulationHud)
-    return;
-  const displayLabel = displayModeLabels[guiControls.displayMode] || guiControls.displayMode || 'Temperature';
-  const toolLabel = toolLabels[guiControls.tool] || guiControls.tool || 'Flashlight';
-  const weatherStationCount = weatherStations.length;
-  const lightningSummary = latestLightningPos && currentLightningProfile ? Math.round(currentLightningProfile.temperature) + ' K strike' : 'Awaiting strike';
-
-  hud.displayMode.textContent = displayLabel;
-  hud.tool.textContent = 'Tool: ' + toolLabel;
-  hud.visuals.textContent = 'Vectors ' + (guiControls.showWindVectors ? 'On' : 'Off') + ' · Drops ' + (guiControls.showDrops ? 'On' : 'Off');
-  hud.observers.textContent = weatherStationCount + ' station' + (weatherStationCount == 1 ? '' : 's') + ' · ' + (guiControls.showWeatherStations ? 'Visible' : 'Hidden');
-  hud.lightning.textContent = lightningSummary;
-  hud.controls.textContent = 'Controls: N stations · M station tool · Active tool ' + toolLabel + '.';
-  hud.shell.classList.toggle('compact', !guiControls.showWindVectors && !guiControls.showWeatherStations);
-
-  showSimulationHudPulse();
+  return;
 }
 
 function setWindVectorVisibility(visible)
 {
+  if (guiControls?.lightweightRendering)
+    visible = false;
   displayVectorField = !!visible;
   if (guiControls)
     guiControls.showWindVectors = !!visible;
@@ -1108,6 +1037,7 @@ const guiControls_default = {
   SmoothCam : false,
   camSpeed : 0.01,
   exposure : 1.0,
+  lightweightRendering : true,
   timeOfDay : 9.9,
   latitude : 45.0,
   month : 6.65, // Northern hemisphere summer solstice
@@ -1123,7 +1053,7 @@ const guiControls_default = {
   brushIntensity : 0.01,
   allowCaves : true,
   showGraph : false,
-  showSimulationHud : true,
+  showSimulationHud : false,
   showWindVectors : false,
   showWeatherStations : true,
   realDewPoint : false, // show real dew point in graph, instead of dew point with cloud water included
@@ -1136,6 +1066,7 @@ const guiControls_default = {
   enableCameraShake : true,
   precipitationChargeCoupling : 0.75,
   lightningEvaporationFeedback : 0.35,
+  lightningIgnitesFires : true,
   showCharges : false,
   dryLapseRate : 10.0,     // Real: 9.8 degrees / km
   simHeight : 12000,       // meters
@@ -1563,7 +1494,7 @@ function createBloomFBOs()
   let res = new Vec2D(canvas.width, canvas.height);
 
   bloomFBOs.length = 0;           // empty array
-  for (let i = 0; i < 100; i++) { // max bloom iterations
+  for (let i = 0; i < 8; i++) { // lightweight bloom chain
     let width = res.x >> i;       // right shift to devide by 2 multiple times
     let height = res.y >> i;
 
@@ -4624,6 +4555,14 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         gl.uniform1f(gl.getUniformLocation(postProcessingProgram, 'exposure'), guiControls.exposure);
       })
       .name('Exposure');
+    display_folder.add(guiControls, 'lightweightRendering').onChange(function() {
+      if (guiControls.lightweightRendering) {
+        guiControls.showWindVectors = false;
+        guiControls.showDrops = false;
+        guiControls.showCharges = false;
+        setWindVectorVisibility(false);
+      }
+    }).name('Lightweight Rendering');
 
     display_folder.add(guiControls, 'camSpeed', 0.001, 0.050, 0.001).name('Camera Pan Speed');
     display_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
@@ -4643,10 +4582,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'SmoothCam').onChange(function() { cam.smooth = guiControls.SmoothCam; }).name('Smooth Camera');
 
     display_folder.add(guiControls, 'showGraph').onChange(hideOrShowGraph).name('Show Sounding Graph').listen();
-    display_folder.add(guiControls, 'showSimulationHud').onChange(function() { setSimulationHudVisibility(guiControls.showSimulationHud); updateSimulationHud(); }).name('Show Simulation HUD').listen();
     display_folder.add(guiControls, 'showWindVectors').onChange(function() { setWindVectorVisibility(guiControls.showWindVectors); updateSimulationHud(); }).name('Show Wind Vectors').listen();
     display_folder.add(guiControls, 'showWeatherStations').onChange(function() { setWeatherStationsVisibility(guiControls.showWeatherStations); updateSimulationHud(); }).name('Show Weather Stations').listen();
-    display_folder.add(guiControls, 'showDrops').onChange(updateSimulationHud).name('Show Droplets').listen();
     display_folder.add(guiControls, 'realDewPoint').name('Show Real Dew Point');
 
 
@@ -4718,6 +4655,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       }
     });
     advanced_folder.add(guiControls, 'enableCameraShake').name('Camera Shake');
+    advanced_folder.add(guiControls, 'lightningIgnitesFires').name('Lightning starts fires').onChange(function() {
+      gl.useProgram(boundaryProgram);
+      gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'lightningIgnitesFires'), guiControls.lightningIgnitesFires ? 1 : 0);
+    });
 
     advanced_folder.add(guiControls, 'resetSettings').name('Reset all settings');
 
@@ -5463,7 +5404,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       handlePause();
     } else if (event.code == 'KeyD') {
       // D
-      guiControls.showDrops = !guiControls.showDrops;
+      if (!guiControls.lightweightRendering)
+        guiControls.showDrops = !guiControls.showDrops;
     } else if (event.code == 'KeyB') {
       // B: scrolling to change brush size
       bPressed = true;
@@ -5482,9 +5424,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       guiControls.showGraph = !guiControls.showGraph;
       hideOrShowGraph();
     } else if (event.code == 'KeyJ') {
-      guiControls.showSimulationHud = !guiControls.showSimulationHud;
-      setSimulationHudVisibility(guiControls.showSimulationHud);
-      updateSimulationHud();
+      // Simulation HUD removed.
     } else if (event.code == 'Tab') {
       // TAB
       event.preventDefault();
@@ -6569,6 +6509,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
   // gl.uniform1fv(gl.getUniformLocation(boundaryProgram, 'initial_T'), initial_T);
   gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'initialProfileTex'), 11);
   gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'allowCaves'), guiControls.allowCaves ? 1 : 0);
+  gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'lightningIgnitesFires'), guiControls.lightningIgnitesFires ? 1 : 0);
 
   gl.useProgram(curlProgram);
   gl.uniform2f(gl.getUniformLocation(curlProgram, 'texelSize'), texelSizeX, texelSizeY);
@@ -6964,6 +6905,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
             const evapBoost = 1.0 + lightningEvaporationPulse * guiControls.lightningEvaporationFeedback;
             gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'waterEvaporation'), guiControls.waterEvaporation * evapBoost);
             gl.uniform1f(gl.getUniformLocation(boundaryProgram, 'landEvaporation'), guiControls.landEvaporation * (1.0 + lightningEvaporationPulse * 0.12));
+            gl.uniform1i(gl.getUniformLocation(boundaryProgram, 'lightningIgnitesFires'), guiControls.lightningIgnitesFires ? 1 : 0);
             gl.uniform1f(uniformLocation_boundaryProgram_iterNum, iterNum);
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, baseTexture_1);
@@ -7350,66 +7292,53 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       gl.bindVertexArray(postProcessingVao);
 
 
-      gl.useProgram(isolateBrightPartsProgram);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, hdrFBO.texture);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer); // brightPartsFrameBuffer
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clearColor(0.0, 0.0, 0.0, 1.0);                            // background color
-      gl.clear(gl.COLOR_BUFFER_BIT);
-
-      gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // render bright parts to seperate texture
-
-
-      // BLOOM
-
-      let prevFBO = bloomFBOs[0]; // the previous FBO
-
-      gl.useProgram(bloomBlurProgram);
-      gl.uniform1i(gl.getUniformLocation(bloomBlurProgram, 'bloomTexture'), 0);
-
-
-      // downsample
-      for (let i = 1; i < bloomFBOs.length; i++) {
-        let destFBO = bloomFBOs[i];
-        gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
-
-        gl.viewport(0, 0, destFBO.width, destFBO.height);
-
-        // bind texture
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
-        // gl.drawBuffers([ gl.BACK ]);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // draw to destFBO
-
-        prevFBO = destFBO;
-      }
-
-      // upsample and add
-      gl.blendFunc(gl.ONE, gl.ONE); // add to the existing texture in the framebuffer
-      gl.enable(gl.BLEND);
-
-      for (let i = bloomFBOs.length - 2; i >= 0; i--) {
-        let destFBO = bloomFBOs[i];
-
-        gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
+      if (guiControls.lightweightRendering) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer);
+        gl.viewport(0, 0, bloomFBOs[0].width, bloomFBOs[0].height);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      } else {
+        gl.useProgram(isolateBrightPartsProgram);
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
+        gl.bindTexture(gl.TEXTURE_2D, hdrFBO.texture);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bloomFBOs[0].frameBuffer); // brightPartsFrameBuffer
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);                            // background color
+        gl.clear(gl.COLOR_BUFFER_BIT);
 
-        gl.viewport(0, 0, destFBO.width, destFBO.height);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
-        // gl.drawBuffers([ gl.BACK ]);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // draw to destFBO
+        gl.drawBuffers([ gl.COLOR_ATTACHMENT0 ]);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // render bright parts to separate texture
 
-        prevFBO = destFBO;
+        let prevFBO = bloomFBOs[0];
+
+        gl.useProgram(bloomBlurProgram);
+        gl.uniform1i(gl.getUniformLocation(bloomBlurProgram, 'bloomTexture'), 0);
+        for (let i = 1; i < bloomFBOs.length; i++) {
+          let destFBO = bloomFBOs[i];
+          gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
+          gl.viewport(0, 0, destFBO.width, destFBO.height);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          prevFBO = destFBO;
+        }
+
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.enable(gl.BLEND);
+        for (let i = bloomFBOs.length - 2; i >= 0; i--) {
+          let destFBO = bloomFBOs[i];
+          gl.uniform2f(gl.getUniformLocation(bloomBlurProgram, 'texelSize'), prevFBO.texelSizeX, prevFBO.texelSizeY);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, prevFBO.texture);
+          gl.viewport(0, 0, destFBO.width, destFBO.height);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, destFBO.frameBuffer);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          prevFBO = destFBO;
+        }
+        gl.disable(gl.BLEND);
       }
-
-      gl.disable(gl.BLEND);
 
       gl.useProgram(postProcessingProgram);
       gl.activeTexture(gl.TEXTURE0);
@@ -7434,7 +7363,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
       gl.bindVertexArray(fluidVao);
 
-      if (guiControls.showDrops) {
+      if (guiControls.showDrops && !guiControls.lightweightRendering) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         // draw drops over clouds
@@ -7588,7 +7517,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     }
 
     const chargeParticleCount = updateChargeParticleGpuBuffer();
-    if (chargeParticleCount > 0) {
+    if (chargeParticleCount > 0 && guiControls.showCharges && !guiControls.lightweightRendering) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(chargeParticleProgram);
