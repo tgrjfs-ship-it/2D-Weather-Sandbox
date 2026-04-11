@@ -31,6 +31,7 @@ uniform float waterWeight;
 uniform float waterTemperature;
 uniform sampler2D initialProfileTex;
 uniform bool allowCaves;
+uniform bool lightningIgnitesFires;
 
 float getProfileValue(sampler2D profileTex, int y)
 {
@@ -464,7 +465,19 @@ void main()
         }
       case WALLTYPE_LAND: // no break, can also be fire or urban:
         water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + precipDeposition[RAIN_DEPOSITION] * 0.1, 0.0, 1000.0); // rain accumulation
-        water[SNOW] = clamp(water[SNOW] + precipDeposition[SNOW_DEPOSITION] * snowMassToHeight, 0.0, 4000.0);      // snow accumulation in cm
+        float snowfallCm = precipDeposition[SNOW_DEPOSITION] * snowMassToHeight;
+        float tempCAboveSurface = KtoC(realTempAboveSurface);
+        float warmCompaction = clamp(map_range(tempCAboveSurface, -2.0, 4.0, 0.0, 1.0), 0.0, 1.0);
+        float meltFraction = warmCompaction * warmCompaction;
+        float retainedSnow = snowfallCm * (1.0 - 0.85 * meltFraction); // wet snow/rain mix near freezing settles less efficiently
+        float immediateMelt = snowfallCm - retainedSnow;
+        water[SNOW] = clamp(water[SNOW] + retainedSnow, 0.0, 4000.0); // snow accumulation in cm
+        water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + immediateMelt * (0.40 + 0.60 * warmCompaction), 0.0, 1000.0);
+
+        float settlingRate = map_rangeC(tempCAboveSurface, -25.0, 2.5, 0.00012, 0.0018); // compaction and partial melt
+        float settling = min(water[SNOW], water[SNOW] * settlingRate);
+        water[SNOW] -= settling;
+        water[SOIL_MOISTURE] = clamp(water[SOIL_MOISTURE] + settling * 0.82, 0.0, 1000.0);
 
         if (hailImpact) {
           if (wall[TYPE] == WALLTYPE_URBAN) {
@@ -484,7 +497,8 @@ void main()
         water[SOIL_MOISTURE] -= evaporation;
 
         float ignitionEnergy = lightningIgnitionEnergy(texCoord);
-        if (wall[TYPE] == WALLTYPE_LAND && wall[VEGETATION] >= minimalFireVegetation && water[SOIL_MOISTURE] < 75.0 && ignitionEnergy > 0.24)
+        if (lightningIgnitesFires && wall[TYPE] == WALLTYPE_LAND && wall[VEGETATION] >= minimalFireVegetation && water[SOIL_MOISTURE] < 75.0 &&
+            ignitionEnergy > 0.24)
           wall[TYPE] = WALLTYPE_FIRE;
 
 

@@ -155,14 +155,14 @@ float lightningIntensityOverTime(float Tin, vec2 lightningPos, float intensity)
 {
   float T0 = Tin - 1.;
 
-  float repeatPeriod = map_range(random2d(lightningPos), 0., 1., 1.5, 3.0);                                            // 2.5
+  float repeatPeriod = map_range(random2d(lightningPos), 0., 1., 1.2, 2.2);
   float numFlashes = floor(map_range(random2d(lightningPos * 2.737250), 0., 1., 1.0, max(intensity - 0.5, 0.) * 2.0)); // 0.4
 
   float minT = max(T0 - (repeatPeriod * numFlashes), 0.);
 
   float T = max(mod(T0, repeatPeriod), minT);
 
-  return max((1. / (0.05 + pow(T * 2.0, 3.))) - 0.005, 0.) * pow(intensity, 2.0); // fading out curve
+  return max((1. / (0.07 + pow(T * 2.7, 3.5))) - 0.01, 0.) * pow(intensity, 1.55);
 }
 
 float deriveStrikeTemperature(vec2 pos, float strikeIntensity, float isCG)
@@ -252,7 +252,7 @@ vec3 displayIntraCloudLightning(vec2 pos, float lightningTime, float strikeInten
                     * smoothstep(0.22, 0.92, leaderNormY);
   float groundLeader = leaderReach * leaderLife * (leaderLine + leaderBranch * 0.58) * step(texCoord.y, pos.y);
 
-  return icColor * (glowEnvelope * directBolt * pulse * 4400.0 * max(1.28 - lightningTime * 0.13, 0.0) * icCloudGate + groundLeader * 2200.0);
+  return icColor * (glowEnvelope * directBolt * pulse * 2200.0 * max(1.05 - lightningTime * 0.23, 0.0) * icCloudGate + groundLeader * 900.0);
 }
 
 vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningIntensity, float strikeIntensity)
@@ -290,8 +290,8 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   pixVal += branchContribution;
 
   const float branchShowFactor = 1.75;      // 1.5
-  const float leaderBrightness = 18000.;   // 200.0
-  const float mainBoltBrightness = 85000.; // 100000.
+  const float leaderBrightness = 9500.;
+  const float mainBoltBrightness = 36000.;
 
   float brightnessThreshold = 1. - lightningTime * branchShowFactor;
   brightnessThreshold += lightningTexCoord.y * branchShowFactor; // grow from the top to the bottem
@@ -414,7 +414,7 @@ vec4 getAirColor(vec2 fragCoordIn)
 
   emittedLight /= 1. + cloudDensity * 100.0;
 
-#define lightningOnLightBrightness 0.007 // 0.002
+#define lightningOnLightBrightness 0.003
 
   for (int strikeIndex = 0; strikeIndex < 8; strikeIndex++) {
     vec4 activeLightning = texelFetch(lightningDataTex, ivec2(strikeIndex, 0), 0);
