@@ -283,7 +283,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   float branchMask = proceduralLightningBranches(lightningTexCoord, pos, strikeTemperature, branchStrength);
   float dynamicPulse = 0.88 + sin(iterNum * 0.18 + pos.x * 35.0 + pos.y * 21.0) * 0.12;
   float pixVal = max(mix(boltCore, glow, 0.18) * texMask * lightningTextureReady, trunkMask * (0.92 * dynamicPulse));
-  float branchContribution = branchMask * (0.20 + branchStrength * 0.07) * smoothstep(0.12, 0.88, lightningTexCoord.y);
+  float branchContribution = 0.0; // CG rendered as a cleaner single trunk
   pixVal += branchContribution;
 
   const float branchShowFactor = 1.75;      // 1.5
@@ -312,7 +312,7 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
 
   float thermalTint = map_rangeC(strikeTemperature, 14000., 36000., 0.0, 1.0);
   vec3 lightningCol = mix(vec3(1.0, 0.88, 0.72), vec3(0.78, 0.88, 1.0), thermalTint);
-  lightningCol = mix(lightningCol, vec3(0.92, 0.96, 1.0), branchMask * 0.35);
+  lightningCol = mix(lightningCol, vec3(0.92, 0.96, 1.0), branchMask * 0.08);
 
   vec3 outputColor = max(pixVal * lightningCol, vec3(0));
 

@@ -758,238 +758,66 @@ function renderChargeOverlay()
 
 function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.0)
 {
-  if (!chargeGridPositive || !chargeGridNegative || !chargeCellActivation || !chargeGroundNet || !chargeGridVerticalFlow || !chargeGridWindX || !chargeGridWindY || !chargeGroundTargetWeight || !chargeGridCloudMask)
-    initChargeSeparationGrid();
-
-  const size = chargeGridW * chargeGridH;
-  const chargeCap = 7.0;
-  const iterFactor = Math.max(0.4, Math.min(iterScale, 3.5));
-
-  for (let i = 0; i < size; i++) {
-    chargeGridPositive[i] *= 0.989;
-    chargeGridNegative[i] *= 0.989;
-    chargeGridVerticalFlow[i] *= 0.90;
-    chargeGridCloudMask[i] *= 0.965;
-    if (chargeCellActivation[i] > 0)
-      chargeCellActivation[i] -= 1;
-  }
-
-  for (let x = 0; x < chargeGridW; x++)
-    chargeGroundNet[x] = clamp(chargeGroundNet[x] * 0.996, -8.0, 8.0);
-
-  if (chargeSources && chargeSources.length > 0) {
-    let hydroAccumulator = 0.0;
-    for (let i = 0; i < chargeSources.length; i++) {
-      const source = chargeSources[i];
-      const gx = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
-      const gy = clamp(Math.floor(source.y * chargeGridH), 2, chargeGridH - 3);
-      const density = clamp(source.cloudDensity, 0.0, 1.8);
-      const updraft = clamp(source.updraft * 95.0, 0.0, 1.0);
-      const mixedPhase = clamp(source.mixedPhase, 0.0, 1.0);
-      const precipitationLoading = clamp(source.precipitationLoading || 0.0, 0.0, 1.0);
-      const iceMix = clamp(source.iceMix || 0.0, 0.0, 1.0);
-      hydroAccumulator += precipitationLoading * 0.6 + iceMix * 0.4;
-      const hydroBoost = 1.0 + (precipitationLoading * 0.35 + iceMix * 0.24) * guiControls.precipitationChargeCoupling;
-      const injection = (0.05 + density * 0.25) * (0.55 + mixedPhase * 0.9) * iterFactor * hydroBoost;
-
-      for (let dx = -1; dx <= 1; dx++) {
-        const x = (gx + dx + chargeGridW) % chargeGridW;
-        const falloff = dx === 0 ? 1.0 : 0.58;
-        const upperIdx = chargeGridIndex(x, clamp(gy + 1, 0, chargeGridH - 1));
-        const centerIdx = chargeGridIndex(x, gy);
-        const lowerIdx = chargeGridIndex(x, clamp(gy - 1, 0, chargeGridH - 1));
-
-        const liftedPositive = injection * (0.66 + updraft * 0.45) * falloff;
-        const settledNegative = injection * (0.63 + (1.0 - updraft) * 0.42) * falloff;
-
-        chargeGridPositive[upperIdx] = Math.min(chargeGridPositive[upperIdx] + liftedPositive, chargeCap);
-        chargeGridNegative[lowerIdx] = Math.min(chargeGridNegative[lowerIdx] + settledNegative, chargeCap);
-        chargeGridPositive[centerIdx] = Math.min(chargeGridPositive[centerIdx] + liftedPositive * 0.18, chargeCap);
-        chargeGridNegative[centerIdx] = Math.min(chargeGridNegative[centerIdx] + settledNegative * 0.18, chargeCap);
-        chargeGridVerticalFlow[centerIdx] += (updraft - 0.33) * 0.03;
-        chargeCellActivation[centerIdx] = Math.min(chargeCellActivation[centerIdx] + 9, 65535);
-      }
-    }
-    chargeHydrometeorCoupling = hydroAccumulator / Math.max(chargeSources.length, 1);
-  } else {
-    chargeHydrometeorCoupling *= 0.95;
-  }
-
-  for (let y = 1; y < chargeGridH - 1; y++) {
-    for (let x = 0; x < chargeGridW; x++) {
-      const idx = chargeGridIndex(x, y);
-      const shear = Math.abs(chargeGridWindY[idx]) + Math.abs(chargeGridWindX[idx]) * 0.6;
-      if (shear > 0.015) {
-        const ambient = Math.min((shear - 0.015) * 1.8, 0.03);
-        chargeGridPositive[idx] = Math.min(chargeGridPositive[idx] + ambient * 0.55, chargeCap);
-        chargeGridNegative[idx] = Math.min(chargeGridNegative[idx] + ambient * 0.45, chargeCap);
-      }
-    }
-  }
-
-  for (let y = 1; y < chargeGridH - 1; y++) {
-    for (let x = 0; x < chargeGridW; x++) {
-      const idx = chargeGridIndex(x, y);
-      const upIdx = chargeGridIndex(x, y + 1);
-      const downIdx = chargeGridIndex(x, y - 1);
-      const leftIdx = chargeGridIndex((x - 1 + chargeGridW) % chargeGridW, y);
-      const rightIdx = chargeGridIndex((x + 1) % chargeGridW, y);
-
-      const localField = chargeGridPositive[idx] - chargeGridNegative[idx] + chargeGridVerticalFlow[idx];
-      const pDrift = Math.max(0.0, 0.012 + localField * 0.004);
-      const nDrift = Math.max(0.0, 0.012 - localField * 0.004);
-      const pTransfer = Math.min(chargeGridPositive[idx] * pDrift, chargeGridPositive[idx]);
-      const nTransfer = Math.min(chargeGridNegative[idx] * nDrift, chargeGridNegative[idx]);
-
-      chargeGridPositive[idx] -= pTransfer;
-      chargeGridNegative[idx] -= nTransfer;
-
-      chargeGridPositive[upIdx] = Math.min(chargeGridPositive[upIdx] + pTransfer * 0.74, chargeCap);
-      chargeGridPositive[leftIdx] = Math.min(chargeGridPositive[leftIdx] + pTransfer * 0.13, chargeCap);
-      chargeGridPositive[rightIdx] = Math.min(chargeGridPositive[rightIdx] + pTransfer * 0.13, chargeCap);
-
-      chargeGridNegative[downIdx] = Math.min(chargeGridNegative[downIdx] + nTransfer * 0.74, chargeCap);
-      chargeGridNegative[leftIdx] = Math.min(chargeGridNegative[leftIdx] + nTransfer * 0.13, chargeCap);
-      chargeGridNegative[rightIdx] = Math.min(chargeGridNegative[rightIdx] + nTransfer * 0.13, chargeCap);
-
-      const recombine = Math.min(chargeGridPositive[idx], chargeGridNegative[idx]) * (0.052 - chargeHydrometeorCoupling * 0.018);
-      chargeGridPositive[idx] -= recombine;
-      chargeGridNegative[idx] -= recombine;
-    }
-  }
-
-  for (let x = 0; x < chargeGridW; x++) {
-    const nearSurfaceIdx = chargeGridIndex(x, 2);
-    const lowerCloudNet = chargeGridPositive[nearSurfaceIdx] - chargeGridNegative[nearSurfaceIdx];
-    const lowNeg = chargeGridNegative[nearSurfaceIdx];
-    const lowPos = chargeGridPositive[nearSurfaceIdx];
-    const targetWeight = chargeGroundTargetWeight ? chargeGroundTargetWeight[x] : 1.0;
-    const induction = clamp(((lowNeg * 0.085) - (lowPos * 0.028) - lowerCloudNet * 0.035) * targetWeight, -0.10, 0.34);
-    chargeGroundNet[x] = clamp(chargeGroundNet[x] + induction, -8.0, 8.0);
-  }
-
-  updateChargeParticlesFromGrid(currentIter);
-  buildChargeLinkChains();
-
-  if (currentIter <= chargeLinksLastStrikeIter || currentIter < chargeSystemWarmupUntilIter)
+  if (!chargeSources || chargeSources.length == 0 || currentIter <= chargeLinksLastStrikeIter || currentIter < chargeSystemWarmupUntilIter)
     return null;
 
   let bestIC = null;
   let bestICScore = 0.0;
   let bestCG = null;
   let bestCGScore = 0.0;
+  let stormPotential = 0.0;
 
-  for (let i = 0; i < chargeLinkChains.length; i++) {
-    const chain = chargeLinkChains[i];
-    const head = chain.nodes[0];
-    const tail = chain.nodes[chain.nodes.length - 1];
-    const centerY = (head.y + tail.y) * 0.5;
-    const centerX = mod((head.x + tail.x) * 0.5 + 1.0, 1.0);
-    const maturity = Math.min((head.age + tail.age) / 150.0, 1.0);
-    const chainLengthBoost = 1.0 + (chain.nodes.length - 2) * 0.16;
-    const score = chain.contrast * chainLengthBoost * (1.0 + maturity + chargeHydrometeorCoupling * 0.25);
-    if (score > bestICScore) {
-      bestICScore = score;
+  for (let i = 0; i < chargeSources.length; i++) {
+    const source = chargeSources[i];
+    const density = clamp(source.cloudDensity || 0.0, 0.0, 1.0);
+    const mixedPhase = clamp(source.mixedPhase || 0.0, 0.0, 1.0);
+    const updraft = clamp((source.updraft || 0.0) * 95.0, 0.0, 1.0);
+    const precipLoad = clamp(source.precipitationLoading || 0.0, 0.0, 1.0);
+    const stormScore = density * 1.7 + mixedPhase * 1.1 + updraft * 0.7 + precipLoad * 0.5;
+    stormPotential += stormScore;
+
+    const icScore = stormScore * clamp(source.y * 1.15 + 0.25, 0.25, 1.45);
+    if (icScore > bestICScore) {
+      bestICScore = icScore;
       bestIC = {
-        x : centerX,
-        y : centerY,
-        contrast : chain.contrast * chainLengthBoost,
-        cloudToGround : false,
-        sourceParticle : head,
-        targetParticle : tail
+        x : source.x,
+        y : clamp(source.y, 0.35, 0.92),
+        contrast : stormScore,
+        cloudToGround : false
       };
     }
-  }
 
-  for (let x = 0; x < chargeGridW; x++) {
-    const groundCharge = Math.max(0.0, chargeGroundNet[x]);
-    if (groundCharge < 0.68)
-      continue;
-
-    const risingHeight = clamp((groundCharge - 0.45) * 0.18, 0.0, 0.90);
-    let nearestNeg = null;
-    let nearestDist = 99.0;
-    for (let i = 0; i < chargeParticlesNegative.length; i++) {
-      const neg = chargeParticlesNegative[i];
-      if (neg.age < neg.matureAfter)
-        continue;
-      const dx = Math.abs(neg.x - (x + 0.5) / chargeGridW);
-      const wrappedDx = Math.min(dx, 1.0 - dx);
-      const dy = Math.abs(neg.y - risingHeight);
-      const dist = wrappedDx * 1.45 + dy;
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestNeg = neg;
-      }
-    }
-
-    if (!nearestNeg || nearestDist > 0.33)
-      continue;
-
-    const contrast = groundCharge + nearestNeg.strength + 0.20;
-    const cgScore = contrast * (1.35 - nearestDist) * 10.0;
+    const cgScore = stormScore * clamp(1.30 - source.y * 0.65, 0.35, 1.05);
     if (cgScore > bestCGScore) {
       bestCGScore = cgScore;
       bestCG = {
-        x : (x + 0.5) / chargeGridW,
-        y : Math.max(0.035, nearestNeg.y * 0.55),
-        contrast,
-        cloudToGround : true,
-        sourceParticle : null,
-        targetParticle : nearestNeg,
-        groundColumn : x
+        x : source.x,
+        y : clamp(source.y * 0.96, 0.30, 0.88), // keep CG origin inside cloud column
+        contrast : stormScore,
+        cloudToGround : true
       };
     }
   }
 
-  if (chargeSources && chargeSources.length > 0) {
-    for (let i = 0; i < chargeSources.length; i++) {
-      const source = chargeSources[i];
-      if (source.cloudDensity < 0.26 || source.mixedPhase < 0.24)
-        continue;
-      const groundColumn = clamp(Math.floor(source.x * chargeGridW), 0, chargeGridW - 1);
-      const groundCharge = Math.max(0.0, chargeGroundNet[groundColumn]);
-      const terrainBoost = chargeGroundTargetWeight ? clamp(chargeGroundTargetWeight[groundColumn], 0.8, 1.9) : 1.0;
-      const densityScore = (source.cloudDensity * 1.35 + source.mixedPhase * 0.85 + source.precipitationLoading * 0.55 + source.iceMix * 0.40 + groundCharge * 0.35) * terrainBoost;
-      if (densityScore < 1.05)
-        continue;
-      const cgScore = densityScore * clamp(1.30 - source.y * 0.45, 0.85, 1.25) * 10.0;
-      if (cgScore > bestCGScore) {
-        bestCGScore = cgScore;
-        bestCG = {
-          x : source.x,
-          y : clamp(source.y * 0.74, 0.10, 0.82),
-          contrast : densityScore,
-          cloudToGround : true,
-          sourceParticle : null,
-          targetParticle : null,
-          groundColumn
-        };
-      }
-    }
-  }
+  const avgPotential = stormPotential / Math.max(chargeSources.length, 1);
+  chargeHydrometeorCoupling = avgPotential;
 
-  let best = null;
-  if (bestIC && bestCG)
-    best = Math.random() < 0.5 ? bestIC : bestCG;
-  else if (bestCG)
-    best = bestCG;
-  else
-    best = bestIC;
+  if (avgPotential < 0.86)
+    return null;
 
-  const bestScore = Math.max(bestICScore, bestCGScore);
-  if (!best || bestScore < 0.50)
+  // Frequency control depends on storm potential + random draw (not only a cooldown gate)
+  const triggerLikelihood = clamp((avgPotential - 0.86) * 0.10 + Math.max(stormPotential - 2.9, 0.0) * 0.020, 0.0, 0.45);
+  if (Math.random() > triggerLikelihood)
+    return null;
+
+  const cgPreference = clamp((avgPotential - 1.08) * 0.70, 0.12, 0.70);
+  const chooseCG = bestCG && (Math.random() < cgPreference || !bestIC);
+  const best = chooseCG ? bestCG : bestIC;
+  if (!best)
     return null;
 
   chargeLinksLastStrikeIter = currentIter;
-  const strikeIntensity = clamp(0.44 + best.contrast * (best.cloudToGround ? 1.25 : 0.95) + chargeHydrometeorCoupling * 0.42, 0.42, 4.6);
-
-  if (best.sourceParticle)
-    best.sourceParticle.age = Math.max(0, best.sourceParticle.age - 35);
-  if (best.targetParticle)
-    best.targetParticle.age = Math.max(0, best.targetParticle.age - 35);
-  if (best.groundColumn !== undefined)
-    chargeGroundNet[best.groundColumn] *= 0.28;
+  const strikeIntensity = clamp(0.36 + best.contrast * (best.cloudToGround ? 0.68 : 0.54), 0.35, 3.0);
 
   return {
     x : best.x,
@@ -999,6 +827,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     cloudToGround : best.cloudToGround
   };
 }
+
 
 
 const guiControls_default = {
