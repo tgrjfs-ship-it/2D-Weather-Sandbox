@@ -767,6 +767,26 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   let bestCGScore = 0.0;
   let stormPotential = 0.0;
 
+  function pickCloudEdgeX(source, sourceList)
+  {
+    const edgeRadius = clamp(0.010 + source.cloudDensity * 0.020 + (source.precipitationLoading || 0.0) * 0.020, 0.010, 0.050);
+    const side = Math.random() < 0.5 ? -1.0 : 1.0;
+    let edgeX = mod(source.x + side * edgeRadius, 1.0);
+
+    // If nearby storm-core samples exist on this side, push closer to that outer edge.
+    for (let i = 0; i < sourceList.length; i++) {
+      const neighbor = sourceList[i];
+      if (Math.abs(neighbor.y - source.y) > 0.10 || neighbor.cloudDensity < 0.30)
+        continue;
+      const dx = neighbor.x - source.x;
+      if (side * dx > 0.0) {
+        edgeX = mod(source.x + side * Math.max(Math.abs(dx), edgeRadius), 1.0);
+      }
+    }
+
+    return edgeX;
+  }
+
   for (let i = 0; i < chargeSources.length; i++) {
     const source = chargeSources[i];
     const density = clamp(source.cloudDensity || 0.0, 0.0, 1.0);
@@ -791,7 +811,7 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
     if (cgScore > bestCGScore) {
       bestCGScore = cgScore;
       bestCG = {
-        x : source.x,
+        x : pickCloudEdgeX(source, chargeSources),
         y : clamp(source.y * 0.96, 0.30, 0.88), // keep CG origin inside cloud column
         contrast : stormScore,
         cloudToGround : true
