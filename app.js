@@ -377,6 +377,7 @@ var chargeGridWindY = null;
 var chargeGroundTargetWeight = null;
 var chargeGridCloudMask = null;
 var pendingLightningBursts = [];
+var lightningRods = [];
 
 const PI = 3.14159265359;
 const degToRad = 0.0174533;
@@ -429,6 +430,7 @@ const toolLabels = {
   TOOL_VEGETATION : 'Vegetation',
   TOOL_WALL_SNOW : 'Snow',
   TOOL_WIND : 'Wind',
+  TOOL_LIGHTNING_ROD : 'Lightning rod',
   TOOL_STATION : 'Weather station'
 };
 
@@ -816,6 +818,40 @@ function updateChargeSeparationSystem(currentIter, chargeSources, iterScale = 1.
   const best = chooseCG ? bestCG : bestIC;
   if (!best)
     return null;
+
+  if (best.cloudToGround) {
+    let attractTarget = null;
+    let bestDist = 99.0;
+
+    for (let i = 0; i < lightningRods.length; i++) {
+      const rod = lightningRods[i];
+      const dx = Math.abs(rod.x - best.x);
+      const wrappedDx = Math.min(dx, 1.0 - dx);
+      const dy = Math.abs(rod.y - best.y);
+      const dist = wrappedDx * 1.2 + dy;
+      if (dist < 0.12 && dist < bestDist) {
+        bestDist = dist;
+        attractTarget = {x : rod.x, y : clamp(rod.y + 0.012, 0.02, 0.98), pull : 0.78};
+      }
+    }
+
+    if (airplaneMode && airplane?.phys?.pos) {
+      const planeX = mod((airplane.phys.pos.x / cellHeight) / sim_res_x, 1.0);
+      const planeY = clamp((airplane.phys.pos.y / cellHeight + 1.0) / sim_res_y, 0.0, 1.0);
+      const dx = Math.abs(planeX - best.x);
+      const wrappedDx = Math.min(dx, 1.0 - dx);
+      const dy = Math.abs(planeY - best.y);
+      const dist = wrappedDx * 1.2 + dy;
+      if (dist < 0.10 && Math.random() < 0.35 && (!attractTarget || dist < bestDist)) { // airplane attracts less likely than rods
+        attractTarget = {x : planeX, y : planeY, pull : 0.42};
+      }
+    }
+
+    if (attractTarget) {
+      best.x = mod(mix(best.x, attractTarget.x, attractTarget.pull), 1.0);
+      best.y = clamp(mix(best.y, attractTarget.y, attractTarget.pull), 0.02, 0.98);
+    }
+  }
 
   chargeLinksLastStrikeIter = currentIter;
   const strikeIntensity = clamp(0.36 + best.contrast * (best.cloudToGround ? 0.68 : 0.54), 0.35, 3.0);
@@ -2098,7 +2134,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       const initialAngle = Math.random() * Math.PI * 2.0;
       const offsetScale = baseAmplitude * 1.55 * randomOffsetScale;
       this.#shakeOffsetX = Math.cos(initialAngle) * offsetScale;
-      this.#shakeOffsetY = Math.sin(initialAngle) * offsetScale / sim_aspect;
+      this.#shakeOffsetY = Math.sin(initialAngle) * offsetScale;
       this.#shakeJitterFrames = 0;
     }
 
@@ -2115,7 +2151,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
           const jitterAngle = Math.random() * Math.PI * 2.0;
           const jitterScale = this.#shakeAmplitude * 1.35;
           this.#shakeOffsetX = Math.cos(jitterAngle) * jitterScale;
-          this.#shakeOffsetY = Math.sin(jitterAngle) * jitterScale / sim_aspect;
+          this.#shakeOffsetY = Math.sin(jitterAngle) * jitterScale;
         }
         this.#shakeAmplitude *= 0.92;
       }
@@ -4156,6 +4192,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         'Vegetation' : 'TOOL_VEGETATION',
         'Snow' : 'TOOL_WALL_SNOW',
         'Wind' : 'TOOL_WIND',
+        'Lightning Rod' : 'TOOL_LIGHTNING_ROD',
         'Weather Station' : 'TOOL_STATION',
       })
       .name('Tool')
@@ -4386,17 +4423,6 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     display_folder.add(guiControls, 'camSpeed', 0.001, 0.050, 0.001).name('Camera Pan Speed');
     display_folder.add(guiControls, 'randomizeDisplayMode').name('Randomize Display');
 
-
-    display_folder.add(guiControls, 'wrapHorizontally')
-      .onChange(function() {
-        cam.wrapHorizontally = guiControls.wrapHorizontally;
-        cam.center();
-        if (guiControls.wrapHorizontally)
-          horizontalDisplayMult = 3.0;
-        else
-          horizontalDisplayMult = 1.0;
-      })
-      .name('Wrap Horizontally');
 
     display_folder.add(guiControls, 'SmoothCam').onChange(function() { cam.smooth = guiControls.SmoothCam; }).name('Smooth Camera');
 
@@ -4838,7 +4864,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   function collectChargeSources(currentIter, sampleColumns = 18)
   {
-    if (currentIter - lastChargeSourceScanIter < 3)
+    const resolutionCost = sim_res_x * sim_res_y;
+    const scanEvery = resolutionCost > 1200000 ? 8 : resolutionCost > 700000 ? 6 : resolutionCost > 350000 ? 4 : 3;
+    if (currentIter - lastChargeSourceScanIter < scanEvery)
       return cachedChargeSources;
 
     const sources = [];
@@ -4846,18 +4874,18 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     const yEnd = Math.floor(sim_res_y * 0.97);
     const rotation = Math.floor(currentIter * 0.91) % sim_res_x;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuff_1);
+    const baseColumn = new Float32Array(sim_res_y * 4);
+    const waterColumn = new Float32Array(sim_res_y * 4);
+    const wallColumn = new Int8Array(sim_res_y * 4);
 
     for (let col = 0; col < sampleColumns; col++) {
       const simX = Math.floor(((col + 0.5) / sampleColumns) * sim_res_x + rotation) % sim_res_x;
-      const baseColumn = new Float32Array(sim_res_y * 4);
-      const waterColumn = new Float32Array(sim_res_y * 4);
 
       gl.readBuffer(gl.COLOR_ATTACHMENT0);
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, baseColumn);
       gl.readBuffer(gl.COLOR_ATTACHMENT1);
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA, gl.FLOAT, waterColumn);
 
-      const wallColumn = new Int8Array(sim_res_y * 4);
       gl.readBuffer(gl.COLOR_ATTACHMENT2);
       gl.readPixels(simX, 0, 1, sim_res_y, gl.RGBA_INTEGER, gl.BYTE, wallColumn);
       let surfaceY = 0;
@@ -5118,6 +5146,13 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
         if (simXpos >= 0 && simXpos < sim_res_x)
           weatherStations.push(new Weatherstation(simXpos, simYpos)); // add weather station
+      } else if (guiControls.tool == 'TOOL_LIGHTNING_ROD') {
+        const rodY = findSimYposAboveSurfaceAtMouseX();
+        if (mouseXinSim >= 0.0 && mouseXinSim <= 1.0) {
+          lightningRods.push({x : mouseXinSim, y : clamp(rodY / sim_res_y, 0.0, 1.0)});
+          if (lightningRods.length > 128)
+            lightningRods.shift();
+        }
       }
     } else if (e.button == 1) {
       // middle mouse button
@@ -6843,7 +6878,9 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
               gl.disable(gl.BLEND);
               gl.bindVertexArray(fluidVao); // set screenfilling rect again
 
-              const chargeSources = collectChargeSources(iterNum, Math.max(10, Math.round(guiControls.IterPerFrame * 1.6)));
+              const resolutionScale = Math.sqrt(300000 / Math.max(sim_res_x * sim_res_y, 1));
+              const adaptiveColumns = clamp(Math.round(Math.max(8, guiControls.IterPerFrame * 1.4) * resolutionScale), 6, 16);
+              const chargeSources = collectChargeSources(iterNum, adaptiveColumns);
               const chargeStrike = updateChargeSeparationSystem(iterNum, chargeSources, guiControls.IterPerFrame);
               if (chargeStrike) {
                 emitLightningStrike(chargeStrike);
@@ -6910,7 +6947,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     let cursorType = 1.0; // normal circular brush
     if (guiControls.wholeWidth) {
       cursorType = 2.0;   // cursor whole width brush
-    } else if (SETUP_MODE || (inputType <= 0 && !bPressed && (guiControls.tool == 'TOOL_NONE' || guiControls.tool == 'TOOL_STATION'))) {
+    } else if (SETUP_MODE || (inputType <= 0 && !bPressed &&
+                              (guiControls.tool == 'TOOL_NONE' || guiControls.tool == 'TOOL_STATION' || guiControls.tool == 'TOOL_LIGHTNING_ROD'))) {
       cursorType = 0;     // cursor off sig
     }
 
