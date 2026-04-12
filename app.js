@@ -739,21 +739,41 @@ function renderChargeOverlay()
     ctx.fillText(p.charge, pt.x, pt.y);
   };
 
-  for (let i = 0; i < chargeParticlesPositive.length; i++)
-    drawParticle(chargeParticlesPositive[i], 'rgba(255,115,115,0.78)');
-  for (let i = 0; i < chargeParticlesNegative.length; i++)
-    drawParticle(chargeParticlesNegative[i], 'rgba(115,190,255,0.78)');
+  // Lightning rods are always interactable/visible when placed.
+  for (let i = 0; i < lightningRods.length; i++) {
+    const rod = lightningRods[i];
+    const pt = toScreen(rod.x, rod.y);
+    if (pt.x < -12 || pt.x > w + 12 || pt.y < -12 || pt.y > h + 12)
+      continue;
+    ctx.strokeStyle = 'rgba(255,235,140,0.90)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y + 10);
+    ctx.lineTo(pt.x, pt.y - 7);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,250,200,0.95)';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y - 8, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  ctx.strokeStyle = 'rgba(255,240,180,0.25)';
-  for (let i = 0; i < chargeLinkChains.length; i++) {
-    const chain = chargeLinkChains[i];
-    for (let j = 0; j < chain.nodes.length - 1; j++) {
-      const p0 = toScreen(chain.nodes[j].x, chain.nodes[j].y);
-      const p1 = toScreen(chain.nodes[j + 1].x, chain.nodes[j + 1].y);
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
+  if (guiControls.showCharges) {
+    for (let i = 0; i < chargeParticlesPositive.length; i++)
+      drawParticle(chargeParticlesPositive[i], 'rgba(255,115,115,0.78)');
+    for (let i = 0; i < chargeParticlesNegative.length; i++)
+      drawParticle(chargeParticlesNegative[i], 'rgba(115,190,255,0.78)');
+
+    ctx.strokeStyle = 'rgba(255,240,180,0.25)';
+    for (let i = 0; i < chargeLinkChains.length; i++) {
+      const chain = chargeLinkChains[i];
+      for (let j = 0; j < chain.nodes.length - 1; j++) {
+        const p0 = toScreen(chain.nodes[j].x, chain.nodes[j].y);
+        const p1 = toScreen(chain.nodes[j + 1].x, chain.nodes[j + 1].y);
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.stroke();
+      }
     }
   }
 }
@@ -4859,6 +4879,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
     // Render output framebuffers need to match canvas resolution
     createBloomFBOs(); // recreate bloom framebuffers
     createHdrFBO();    // recreate hdr framebuffer
+    if (chargeRenderOverlay) {
+      chargeRenderOverlay.canvas.width = window.innerWidth;
+      chargeRenderOverlay.canvas.height = window.innerHeight;
+    }
 
   });
 
@@ -5107,6 +5131,8 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
 
   canvas.addEventListener('mousedown', function(e) { mouseDownEvent(e); });
   graphCanvas.addEventListener('mousedown', function(e) { mouseDownEvent(e); });
+  canvas.addEventListener('contextmenu', function(event) { event.preventDefault(); });
+  graphCanvas.addEventListener('contextmenu', function(event) { event.preventDefault(); });
 
 
   function findSimYposAboveSurfaceAtMouseX() // find the lowest location that is not underground
@@ -5159,6 +5185,23 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
       middleMousePressed = true;
       prevMouseX = mouseX;
       prevMouseY = mouseY;
+    } else if (e.button == 2 && guiControls.tool == 'TOOL_LIGHTNING_ROD') {
+      let nearestIndex = -1;
+      let nearestDist = 99.0;
+      const cursorY = clamp(findSimYposAboveSurfaceAtMouseX() / sim_res_y, 0.0, 1.0);
+      for (let i = 0; i < lightningRods.length; i++) {
+        const rod = lightningRods[i];
+        const dx = Math.abs(rod.x - mouseXinSim);
+        const wrappedDx = Math.min(dx, 1.0 - dx);
+        const dy = Math.abs(rod.y - cursorY);
+        const dist = wrappedDx * 1.2 + dy;
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestIndex = i;
+        }
+      }
+      if (nearestIndex >= 0 && nearestDist < 0.035)
+        lightningRods.splice(nearestIndex, 1);
     }
   }
 
@@ -6560,6 +6603,7 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         remaining : burstCount - 1,
         nextIter : iterNum + 2,
         seed : {...chargeStrike},
+        depth : 0,
         arcDirection,
         arcRadiusX,
         arcRadiusY,
@@ -6910,6 +6954,21 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
                   followUp : true
                 };
                 emitLightningStrike(followUpStrike);
+
+                if (!isIC && burst.depth < 1 && Math.random() < 0.42) {
+                  pendingLightningBursts.push({
+                    remaining : 1,
+                    nextIter : iterNum + 1,
+                    seed : followUpStrike,
+                    depth : burst.depth + 1,
+                    arcDirection : (Math.random() < 0.5 ? -1.0 : 1.0) * burst.arcDirection,
+                    arcRadiusX : burst.arcRadiusX * (0.40 + Math.random() * 0.22),
+                    arcRadiusY : burst.arcRadiusY * (0.50 + Math.random() * 0.26),
+                    arcCurve : burst.arcCurve * (0.60 + Math.random() * 0.18),
+                    arcPhase : theta + (Math.random() - 0.5) * 0.70,
+                    arcProgress : 0
+                  });
+                }
 
                 burst.remaining -= 1;
                 burst.nextIter = iterNum + 2 + Math.floor(Math.random() * 2);
@@ -7388,6 +7447,10 @@ async function mainScript(initialBaseTex, initialWaterTex, initialWallTex, initi
         weatherStations[i].updateCanvas(); // update weather stations
       }
     }
+    if (lightningRods.length > 0 || guiControls.showCharges)
+      renderChargeOverlay();
+    else if (chargeRenderOverlay?.ctx)
+      chargeRenderOverlay.ctx.clearRect(0, 0, chargeRenderOverlay.canvas.width, chargeRenderOverlay.canvas.height);
 
 
     frameNum++;

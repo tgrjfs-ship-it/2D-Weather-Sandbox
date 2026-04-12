@@ -283,7 +283,9 @@ vec3 displayLightning(vec2 pos, float lightningTime, float currentLightningInten
   float branchMask = proceduralLightningBranches(lightningTexCoord, pos, strikeTemperature, branchStrength);
   float dynamicPulse = 0.88 + sin(iterNum * 0.18 + pos.x * 35.0 + pos.y * 21.0) * 0.12;
   float pixVal = max(mix(boltCore, glow, 0.18) * texMask * lightningTextureReady, trunkMask * (0.92 * dynamicPulse));
-  float branchContribution = 0.0; // CG rendered as a cleaner single trunk
+  float branchPrimary = branchMask * (0.07 + branchStrength * 0.025) * smoothstep(0.18, 0.92, lightningTexCoord.y);
+  float branchSecondary = pow(branchMask, 2.0) * 0.032 * smoothstep(0.32, 0.96, lightningTexCoord.y); // recursive-looking finer forks
+  float branchContribution = branchPrimary + branchSecondary;
   pixVal += branchContribution;
 
   const float branchShowFactor = 1.75;      // 1.5
