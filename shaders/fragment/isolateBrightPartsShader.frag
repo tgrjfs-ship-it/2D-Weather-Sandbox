@@ -1,6 +1,6 @@
 #version 300 es
-precision highp float;
-precision highp sampler2D;
+precision mediump float;
+precision mediump sampler2D;
 
 in vec2 texCoord;     // this
 in vec2 texCoordXmY0; // left
